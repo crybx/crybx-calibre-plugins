@@ -17,7 +17,7 @@ class ActionModifyEpub(InterfaceActionBase):
     calibre utilities to run without needing to load the GUI libraries.
     '''
     name                    = 'Epubaholic'
-    description             = 'Apply cleanup tasks and updates to an epub without doing a conversion'
+    description             = 'Apply custom text transformations and cleanup actions to an epub without doing a conversion'
     supported_platforms     = ['windows', 'osx', 'linux']
     author                  = 'crybx'
     version                 = (1, 0, 0)
@@ -29,14 +29,14 @@ class ActionModifyEpub(InterfaceActionBase):
     actual_plugin           = 'calibre_plugins.epubaholic.action:ModifyEpubAction'
 
     def is_customizable(self):
-        '''
+        """
         This method must return True to enable customization via
         Preferences->Plugins
-        '''
+        """
         return True
 
     def config_widget(self):
-        '''
+        """
         Implement this method and :meth:`save_settings` in your plugin to
         use a custom configuration dialog.
 
@@ -52,17 +52,17 @@ class ActionModifyEpub(InterfaceActionBase):
 
         The base class implementation of this method raises NotImplementedError
         so by default no user configuration is possible.
-        '''
+        """
         if self.actual_plugin_:
             from calibre_plugins.epubaholic.config import ConfigWidget
             return ConfigWidget(self.actual_plugin_)
 
     def save_settings(self, config_widget):
-        '''
+        """
         Save the settings specified by the user with config_widget.
 
         :param config_widget: The widget returned by :meth:`config_widget`.
-        '''
+        """
         config_widget.save_settings()
 
 

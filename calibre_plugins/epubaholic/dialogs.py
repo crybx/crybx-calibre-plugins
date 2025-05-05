@@ -97,7 +97,8 @@ class ModifyEpubDialog(SizePersistedDialog):
     '''
     def __init__(self, gui, plugin_action):
         self.plugin_action = plugin_action
-        SizePersistedDialog.__init__(self, gui, 'modify epub plugin:options dialog')
+        # This is what determines what options were already selected from previous use
+        SizePersistedDialog.__init__(self, gui, 'epubaholic plugin:options dialog')
         self.setWindowTitle(_('Epubaholic'))
         layout = QVBoxLayout(self)
         self.setLayout(layout)

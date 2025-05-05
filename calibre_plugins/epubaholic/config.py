@@ -29,8 +29,7 @@ DEFAULT_STORE_VALUES = {
                        }
 
 # This is where all preferences for this plugin will be stored
-# TODO: Test after renaming this, maybe last option checked will be remembered
-plugin_prefs = JSONConfig('plugins/Modify ePub')
+plugin_prefs = JSONConfig('plugins/Epubaholic')
 
 # Set defaults
 plugin_prefs.defaults[STORE_SAVED_SETTINGS] = []
