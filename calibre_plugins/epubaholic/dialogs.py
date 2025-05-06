@@ -102,7 +102,7 @@ class ModifyEpubDialog(SizePersistedDialog):
         self.setWindowTitle(_('Epubaholic'))
         layout = QVBoxLayout(self)
         self.setLayout(layout)
-        title_layout = ImageTitleLayout(self, 'images/modify_epub.png', _('Epubaholic Options'))
+        title_layout = ImageTitleLayout(self, 'images/epubaholic_book.png', _('Epubaholic Options'))
         layout.addLayout(title_layout)
 
         # Add hyperlink to a help file at the right. We will replace the correct name when it is clicked.

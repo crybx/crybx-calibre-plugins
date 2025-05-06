@@ -24,7 +24,7 @@ from calibre_plugins.epubaholic.common_icons import set_plugin_icon_resources, g
 from calibre_plugins.epubaholic.dialogs import (ModifyEpubDialog, QueueProgressDialog,
                                                  AddBooksProgressDialog)
 
-PLUGIN_ICONS = ['images/modify_epub.png']
+PLUGIN_ICONS = ['images/epubaholic_book.png']
 
 HELP_URL = 'https://github.com/kiwidude68/calibre_plugins/wiki/Modify-epub'
 
