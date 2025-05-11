@@ -47,54 +47,6 @@ def modify_epub(log, title, epub_path, calibre_opf_path, cover_path, options):
     return new_book_path
 
 
-def _process_search_term(term, all_files, existing_matches=None):
-    """
-    Process a single search term against all files and return matching files
-
-    Args:
-        term: The search term to process
-        all_files: List of all filenames to check against
-        existing_matches: Optional list of already matched files
-
-    Returns:
-        List of filenames that match the search term
-    """
-    matching_files = [] if existing_matches is None else existing_matches.copy()
-    term = term.strip()
-
-    if '+' in term:  # Inclusion rule (AND)
-        # Split the term into parts that must all be present
-        include_parts = [part.strip().lower() for part in term.split('+')]
-
-        for filename in all_files:
-            filename_lower = filename.lower()
-            # All parts must be present for this to match
-            if all(part in filename_lower for part in include_parts):
-                if filename not in matching_files:
-                    matching_files.append(filename)
-
-    elif '!' in term:  # Exclusion rule (NOT)
-        # Split into main term and exclusion term
-        parts = term.split('!')
-        main_term = parts[0].strip().lower()
-        exclude_term = parts[1].strip().lower()
-
-        for filename in all_files:
-            filename_lower = filename.lower()
-            # Main term must be present, exclusion term must not be present
-            if main_term in filename_lower and exclude_term not in filename_lower:
-                if filename not in matching_files:
-                    matching_files.append(filename)
-
-    else:  # Basic term (simple match)
-        term_lower = term.lower()
-        for filename in all_files:
-            if term_lower in filename.lower():
-                if filename not in matching_files:
-                    matching_files.append(filename)
-
-    return matching_files
-
 
 class BookModifier(object):
 
@@ -261,13 +213,78 @@ class BookModifier(object):
             self.log('\t  No opf manifest found')
             return []
         search_data = ''
+
+        # EPUB 3
         metadata = container.opf.xpath('//opf:metadata', namespaces={'opf': OPF_NS})[0]
         for child in metadata:
             if child.get('property') == 'calibre:user_metadata':
                 custom_metadata = ''.join(child.itertext())
                 search_data = json.loads(custom_metadata)['#searchterm']['#value#']
                 break
+
+        # Try EPUB 2 if search_data is still empty
+        if search_data == '':
+            meta_item = container.get_meta_content_item('calibre:user_metadata:#searchterm')
+            if meta_item is not None:
+                search_data = json.loads(meta_item.get('content'))['#value#']
+                self.log('\t  Metadata found in EPUB 2 format ', search_data)
+
+        if search_data == '':
+            return None
+
         return search_data.split(',')
+
+    def _process_search_term(self, term, all_files, existing_matches=None):
+        """
+        Process a single search term against all files and return matching files
+
+        Args:
+            term: The search term to process
+            all_files: List of all filenames to check against
+            existing_matches: Optional list of already matched files
+
+        Returns:
+            List of filenames that match the search term
+        """
+        matching_files = [] if existing_matches is None else existing_matches.copy()
+        term = term.strip()
+        if term == "":
+            return matching_files
+
+        self.log('  Searching for chapters: ', term)
+
+        if '+' in term:  # Inclusion rule (AND)
+            # Split the term into parts that must all be present
+            include_parts = [part.strip().lower() for part in term.split('+')]
+
+            for filename in all_files:
+                filename_lower = filename.lower()
+                # All parts must be present for this to match
+                if all(part in filename_lower for part in include_parts):
+                    if filename not in matching_files:
+                        matching_files.append(filename)
+
+        elif '!' in term:  # Exclusion rule (NOT)
+            # Split into main term and exclusion term
+            parts = term.split('!')
+            main_term = parts[0].strip().lower()
+            exclude_term = parts[1].strip().lower()
+
+            for filename in all_files:
+                filename_lower = filename.lower()
+                # Main term must be present, exclusion term must not be present
+                if main_term in filename_lower and exclude_term not in filename_lower:
+                    if filename not in matching_files:
+                        matching_files.append(filename)
+
+        else:  # Basic term (simple match)
+            term_lower = term.lower()
+            for filename in all_files:
+                if term_lower in filename.lower():
+                    if filename not in matching_files:
+                        matching_files.append(filename)
+
+        return matching_files
 
     def _move_chapter_files(self, chapter_files, source_path, target_path):
         self.log('Moving chapter files to new location:', target_path)
@@ -295,7 +312,7 @@ class BookModifier(object):
         # Process each search term individually
         chapter_files = []
         for term in search_terms:
-            chapter_files = _process_search_term(term, all_files, chapter_files)
+            chapter_files = self._process_search_term(term, all_files, chapter_files)
 
         if not chapter_files:
             self.log('No chapter files found')
