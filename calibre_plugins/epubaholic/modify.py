@@ -560,7 +560,92 @@ class BookModifier(object):
                 return x
 
     def _inline_styles_to_tags(self, container):
-        pass
+        dirtied = False
+        self.log('\tConverting inline styles to semantic tags')
+        if container.is_drm_encrypted():
+            self.log('ERROR - cannot convert inline styles in DRM encrypted book')
+            return False
+
+        # Define patterns to convert inline styles to semantic tags
+        style_to_tag_patterns = [
+            # Convert font-style: italic/oblique to <i> tags
+            {
+                'find_style': re.compile(r'(<[^>]*)\s+style="([^"]*?)font-style\s*:\s*(italic|oblique)\s*;?([^"]*?)"([^>]*>)(.*?)(</[^>]+>)', re.IGNORECASE | re.DOTALL),
+                'tag': 'i'
+            },
+            # Convert font-weight: bold/700+ to <b> tags  
+            {
+                'find_style': re.compile(r'(<[^>]*)\s+style="([^"]*?)font-weight\s*:\s*(bold|[7-9]\d\d)\s*;?([^"]*?)"([^>]*>)(.*?)(</[^>]+>)', re.IGNORECASE | re.DOTALL),
+                'tag': 'b'
+            },
+            # Convert text-decoration: underline to <u> tags
+            {
+                'find_style': re.compile(r'(<[^>]*)\s+style="([^"]*?)text-decoration\s*:\s*underline\s*;?([^"]*?)"([^>]*>)(.*?)(</[^>]+>)', re.IGNORECASE | re.DOTALL),
+                'tag': 'u'
+            },
+            # Convert text-decoration: line-through to <s> tags
+            {
+                'find_style': re.compile(r'(<[^>]*)\s+style="([^"]*?)text-decoration\s*:\s*line-through\s*;?([^"]*?)"([^>]*>)(.*?)(</[^>]+>)', re.IGNORECASE | re.DOTALL),
+                'tag': 's'
+            }
+        ]
+
+        def process_style_match(match, tag_name):
+            opening_tag_start = match.group(1)
+            style_before = match.group(2)
+            style_after = match.group(4) if len(match.groups()) >= 4 else ""
+            opening_tag_end = match.group(5) if len(match.groups()) >= 5 else match.group(3)
+            content = match.group(6) if len(match.groups()) >= 6 else match.group(4)
+            closing_tag = match.group(7) if len(match.groups()) >= 7 else match.group(5)
+            
+            # Reconstruct style attribute without the converted style
+            remaining_style = (style_before + style_after).strip()
+            remaining_style = re.sub(r';\s*;', ';', remaining_style)  # Clean up double semicolons
+            remaining_style = remaining_style.strip(';').strip()
+            
+            # Build the new opening tag
+            if remaining_style:
+                new_opening_tag = f'{opening_tag_start} style="{remaining_style}"{opening_tag_end}'
+            else:
+                new_opening_tag = f'{opening_tag_start}{opening_tag_end}'
+            
+            # Wrap content in semantic tag
+            return f'{new_opening_tag}<{tag_name}>{content}</{tag_name}>{closing_tag}'
+
+        # Pattern to remove non-semantic font-weight styles
+        remove_normal_weight = re.compile(r'font-weight\s*:\s*(normal|[1-4]\d\d)\s*;?', re.IGNORECASE)
+
+        for name in container.get_html_names():
+            html = container.get_raw(name)
+            original_html = html
+            replacement_count = 0
+            
+            # Apply each style-to-tag conversion
+            for pattern_info in style_to_tag_patterns:
+                pattern = pattern_info['find_style']
+                tag = pattern_info['tag']
+                
+                matches = list(pattern.finditer(html))
+                if matches:
+                    replacement_count += len(matches)
+                    # Process matches in reverse order to avoid position shifts
+                    for match in reversed(matches):
+                        replacement = process_style_match(match, tag)
+                        html = html[:match.start()] + replacement + html[match.end():]
+            
+            # Remove non-semantic font-weight styles
+            new_html, weight_removals = remove_normal_weight.subn('', html)
+            if weight_removals > 0:
+                replacement_count += weight_removals
+                html = new_html
+            
+            if replacement_count > 0:
+                dirtied = True
+                html = strip_encoding_declarations(html)
+                container.set(name, html)
+                self.log('\t  Converted %d inline styles to tags in: %s' % (replacement_count, name))
+        
+        return dirtied
 
     def _strip_leftover_styles(self, container):
         dirtied = False
