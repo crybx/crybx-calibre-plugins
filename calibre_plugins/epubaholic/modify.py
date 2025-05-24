@@ -563,7 +563,30 @@ class BookModifier(object):
         pass
 
     def _strip_leftover_styles(self, container):
-        pass
+        dirtied = False
+        self.log('\tStripping leftover styles')
+        if container.is_drm_encrypted():
+            self.log('ERROR - cannot strip leftover styles in DRM encrypted book')
+            return False
+
+        from calibre_plugins.epubaholic.text_replacement_utils import apply_replacements_to_content
+        from calibre_plugins.epubaholic.pattern_definitions import get_patterns
+
+        # Get the strip style patterns
+        all_patterns = get_patterns()
+        strip_patterns = all_patterns.get('strip-style', [])
+
+        for name in container.get_html_names():
+            html = container.get_raw(name)
+            new_html, replacement_count = apply_replacements_to_content(html, strip_patterns)
+            
+            if replacement_count > 0:
+                dirtied = True
+                new_html = strip_encoding_declarations(new_html)
+                container.set(name, new_html)
+                self.log('\t  Stripped %d leftover styles in: %s' % (replacement_count, name))
+        
+        return dirtied
 
     def _consistent_ellipsis(self, container):
         dirtied = False
