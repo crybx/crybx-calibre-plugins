@@ -119,7 +119,7 @@ consistent_ellipsis_patterns = [
 
 strip_style_patterns = [
     RegexPattern(" style=\"font-weight:\\s*400;?\"", ""),
-    RegexPattern(" style=\"(?!.*(?:font-weight|italic|bold)).*\"", ""),
+    RegexPattern(" style=\"(?!.*(?:font-weight|italic|bold|center|underline|line-through)).*\"", ""),
     RegexPattern("<span>((?:[^<]|<(?!/?span>))*)</span>", "\\1")
 ]
 
