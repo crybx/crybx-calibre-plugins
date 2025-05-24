@@ -1,0 +1,32 @@
+{
+  "villain-remain-villain": [
+    {"regex": "Ra On|Ra-on|Ra-On|Laon|La On|La-on|La-On", "replace": "Raon"},
+    {"regex": "Hanlaon|Hallaon|Hanraon|Han-ra-on", "replace": "Han Raon"},
+    {"regex": "Minraon", "replace": "Min Raon"},
+    {"regex": "Shi(woo|-woo|-Woo| Woo|u)", "replace": "Siwoo"},
+    {"regex": "Si(-woo|-Woo| Woo|u)", "replace": "Siwoo"},
+    {"regex": "Siwooya", "replace": "Siwoo-ya"},
+    {"Yun Siwoo": "Yoon Siwoo"},
+    {"regex": "Ha Min|Ha-Min|Ha-min", "replace": "Hamin"},
+    {"regex": "Do(-jin|-Jin| Jin)", "replace": "Dojin"},
+    {"regex": "Tae(-geon|-Geon| Geon|gun|-gun|-Gun| Gun|kwon)", "replace":  "Taegeon"},
+    {"regex": "Han(myung|-myung|-Myung|myeong|-myeong|-Myeong| Myeong)", "replace": "Han Myung", "note": "Company run by MC's father." },
+    {"regex": "Myeong", "replace": "Myung"},
+    {"regex": "Myung(-hoon|-Hoon| Hoon|hun|-hun|-Hun| Hun)", "replace": "Myunghoon", "note": "MC's father." },
+    {"regex": "Han-Myung", "replace": "Han Myung" },
+    {"regex": "Ju(won|-won|-Won| Won)", "replace": "Joowon"},
+    {"regex": "Joo(-won|-Won| Won)", "replace": "Joowon"},
+    {"regex": "Seok(hyeo|-Hyeo|-hyeo| Hyeo|-Hyu|-hyu| Hyu)n", "replace": "Seokhyun", "note": "Center Director."},
+    {"regex": "Da(-som|-Som| Som)", "replace": "Dasom", "note": "female"},
+    {"regex": "Ra(hyeon|-hyeon|-Hyeon| Hyeon|-hyun|-Hyun| Hyun", "replace": "Rahyun"},
+    {"regex": "Beom-in-ho", "replace": "Beom Inho"}
+  ],
+  "emperor-wants-to-retire": [
+    {"note": "벨로안", "replace": "Veloran", "regex": "(B|V)e(loa|lloa|lroa|llowa|lora|lorah|loura|loua|la|laa|lo|loh|lua|llowe|lohan)n"},
+    {"regex": "(Bellows|Bellow|Belarus)", "replace": "Veloran"},
+    {"Eylam": "Eilam"}
+  ],
+  "too-many-villains": [
+    {"regex": "(R|L)an(ch|-ch|sh|c|s|sch|h)(elle|ell|el|ul)", "replace": "Rochelle"}
+  ]
+}

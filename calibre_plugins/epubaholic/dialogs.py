@@ -32,69 +32,41 @@ from calibre_plugins.epubaholic.common_dialogs import SizePersistedDialog
 from calibre_plugins.epubaholic.common_widgets import ImageTitleLayout
 
 
-FILE_OPTIONS = [
-            ('remove_itunes_files',       _('Remove iTunes files'),            _('Removes any iTunesMetadata.plist or artwork files\nadded by viewing the epub in iTunes')),
-            ('remove_calibre_bookmarks',  _('Remove calibre bookmark files'),  _('Remove any bookmark files added by the calibre ebook viewer')),
-            ('remove_os_artifacts',       _('Remove OS artifact files'),       _('Removes any OS artifacts like thumbs.db or .DS_Store\nthat are not needed by the epub')),
-            ('remove_unused_images',      _('Remove unused image files'),      _('Remove any unused jpg, png or gif image files that are not referenced\nfrom the html pages. This can occur as the result of careless epub editing.')),
-            ('unpretty',                  _('De-indent (aka unpretty)'),       _('Remove indentation from HTML files')),
-            ('strip_kobo',                _('Strip Kobo DRM remnants'),        _('Remove remnants of Kobo DRM')),
-            ('strip_spans',               _('Strip spans'),                    _('Remove spans without attributes')),
-            ]
+META_OPTIONS = [
+    ('update_metadata', _('Update metadata'), _('Update the manifest with the latest calibre metadata\nand replace an existing identifiable cover if possible.')),
+    ('add_unmanifested_files', _('Add unmanifested files to manifest'), _('Add files to manifest that are in the epub but do not exist in the .opf manifest\n(excluding iTunes/calibre bookmarks)')),
+    ('remove_calibre_bookmarks', _('Remove calibre bookmark files'), _('Remove any bookmark files added by the calibre ebook viewer')),
+]
 
-MANIFEST_OPTIONS = [
-            ('remove_missing_files',      _('Remove missing file entries from manifest'),  _('Remove entries in the manifest for files listed that do not exist in the epub')),
-            ('add_unmanifested_files',    _('Add unmanifested files to manifest'),         _('Add files to manifest that are in the epub but do not exist in the .opf manifest\n(excluding iTunes/calibre bookmarks)')),
-            ('remove_unmanifested_files', _('Remove unmanifested files from epub'),        _('Remove files from the epub that do not exist in the .opf manifest\n(excluding iTunes/calibre bookmarks). Will not be applied if the add option is also checked')),
-            ]
-
-ADOBE_OPTIONS = [
-            ('zero_xpgt_margins',         _('Remove margins from Adobe .xpgt files'),      _('Remove any Adobe .xpgt file margins to prevent them\ninterfering with viewing')),
-            ('remove_xpgt_files',         _('Remove Adobe .xpgt files and links'),         _('Delete the .xpgt file completely from the epub\nas well as removing any links from the xhtml files')),
-            ('remove_drm_meta_tags',      _('Remove Adobe resource DRM meta tags'),        _('Remove any meta tags from the xhtml files that\ncontain DRM urn identifiers.')),
-            ('remove_page_map',           _('Remove page maps'),							_('Removes all types of page map files')),
-            ('remove_gp_page_map',		  _('Remove ONLY Google Play page maps'),			_('Removes only Google Play page map files')),
-            ]
-
-TOC_OPTIONS = [
-            ('flatten_toc',               _('Flatten TOC hierarchy in NCX file'),          _('Restructure the NCX to contain no nesting of navPoint items.\nFor users whose devices do not support a hierarchical TOC.')),
-            ('remove_broken_ncx_links',   _('Remove broken TOC entries in NCX file'),      _('Any NCX entries that point to missing html pages will be removed.\nOrphaned NCX links can happen as a result of a calibre conversion for covers.')),
-            ]
-
-JACKET_OPTIONS = [
-            ('remove_all_jackets',        _('Remove all metadata jackets'),	    _('Remove all calibre jackets, both legacy and current')),
-            ('remove_legacy_jackets',     _('Remove legacy metadata jackets'),  _('Remove jackets generated using versions of calibre prior to 0.6.50')),
-            ('add_replace_jacket',        _('Add/replace metadata jacket'),	    _('Add a jacket if not existing, or replace a non-legacy jacket')),
-            ('jacket_end_book',           _('Jacket at the end of the book'),	_('If a jacket is added/replaced, it is placed at the end of the book instead of the beginning'))
-            ]
-
-COVER_OPTIONS = [
-            ('remove_broken_covers',      _('Remove broken image pages'),    _('Remove html page(s) that contain only an image tag for which\nthe linked image does not exist in the epub')),
-            ('remove_cover',              _('Remove existing cover'),        _('If a cover page is identifiable in the epub then it is completely removed')),
-            ('insert_replace_cover',      _('Insert or replace cover'),      _('If a cover page is identifiable in the epub then it is replaced\notherwise a new cover page is inserted')),
-            ]
-
-METADATA_OPTIONS = [
-            ('update_metadata',           _('Update metadata'),                   _('Update the manifest with the latest calibre metadata\nand replace an existing identifiable cover if possible.')),
-            ('remove_non_dc_elements',    _('Remove non dc: metadata elements'),  _('Remove any metadata from the .opf manifest that is not in the dc: namespace.\nSuch entries are created by editing in Sigil or calibre updating metadata.\nUse this option if publishing your epubs externally.')),
-            ]
+TEXTREPLACE_OPTIONS = [
+    ('smarten_punctuation', _('Smarten punctuation'), _('Convert html to use smart quotes and emdash characters')),
+    ('consistent_ellipsis', _('Consistent ellipsis'), _('Standardizes...ellipses formatting')),
+    ('capitalize_paragraphs', _('Capitalize paragraphs'), _('Makes all paragraphs start with a capital letter')),
+    ('normalize_names', _('Normalize names'), _('Standardizes different spellings of character names')),
+    ('female-to-male', _('Change female to male'), _('Changes all female pronouns to male pronouns')),
+    # I've run out of room in this box
+]
 
 STYLE_OPTIONS = [
-            ('encode_html_utf8',          _('Encode HTML in UTF-8'),                 _('Removes any existing <meta> charset tags on html pages and encodes in UTF-8.\nFor use where ebook does not display quotes in calibre viewer correctly.')),
-            ('remove_embedded_fonts',     _('Remove embedded fonts'),                _('Remove embedded fonts from the manifest and their files to reduce epub size.\nAlso removes @font-face declarations.')),
-            ('rewrite_css_margins',       _('Modify @page and body margin styles'),  _('Replace margin styles for @page or body with your calibre defaults in a new @page style.\nIf your calibre defaults are negative, removes the margin attributes and if necessary the CSS file.')),
-            ('append_extra_css',          _('Append extra CSS'),                     _('Appends any Extra CSS you have defined in your calibre defaults to every .CSS file.\nIf you have no extra CSS defined or text already contained then it does nothing.')),
-            ('smarten_punctuation',       _('Smarten punctuation'),                  _('Convert html to use smart quotes and emdash characters')),
-            ('remove_javascript',         _('Remove inline javascript and files'),   _('Remove any .js files and inline javascript blocks')),
-            ('import_chapters',           _('Import chapters'),                      _('Import chapters from a folder of html files')),
-            ]
+    ('inline_styles_to_tags', _('Replace inline styles with tags'), _('Replace inline css styles with appropriate tags')),
+    ('strip_leftover_styles', _('Strip leftover styles'), _('Remove styles leftover after replacing inline css styles with tags')),
+    ('strip_spans', _('Strip spans'), _('Remove spans without attributes')),
+]
 
-ALL_OPTIONS = FILE_OPTIONS + MANIFEST_OPTIONS + ADOBE_OPTIONS + TOC_OPTIONS + JACKET_OPTIONS + COVER_OPTIONS + METADATA_OPTIONS + STYLE_OPTIONS
+IMPORT_OPTIONS = [
+    ('import_chapters', _('Import chapters'), _('Import chapters from a folder of html files')),
+    ('appy_replacements_to_imports', _('Apply replacements to imported chapters'), _('Apply the text replacements selected to the imported chapters as well')),
+    # Apply replacements to existing chapters
+    # Apply replacements to chapter range
+    #   [ ] to [ ] (e.g. 0 to 10 or 50 to last)
+]
+
+ALL_OPTIONS = META_OPTIONS + TEXTREPLACE_OPTIONS + STYLE_OPTIONS + IMPORT_OPTIONS
 
 class ModifyEpubDialog(SizePersistedDialog):
-    '''
+    """
     Configure which options you want applied during the modify process
-    '''
+    """
     def __init__(self, gui, plugin_action):
         self.plugin_action = plugin_action
         # This is what determines what options were already selected from previous use
@@ -127,15 +99,11 @@ class ModifyEpubDialog(SizePersistedDialog):
         layout.addLayout(self.main_layout, 1)
         options = gprefs.get(self.unique_pref_name+':settings', {})
 
-        self._add_groupbox(0, 0, _('Known Artifacts'), FILE_OPTIONS, options)
-        self._add_groupbox(1, 0, _('Manifest'), MANIFEST_OPTIONS, options)
-        self._add_groupbox(2, 0, _('Adobe'), ADOBE_OPTIONS, options)
-        self._add_groupbox(3, 0, _('Table of Contents'), TOC_OPTIONS, options)
+        self._add_groupbox(0, 0, _('Meta'), META_OPTIONS, options)
+        self._add_groupbox(0, 1, _('Text Replacements'), TEXTREPLACE_OPTIONS, options)
 
-        self._add_groupbox(0, 1, _('HTML && Styles'), STYLE_OPTIONS, options)
-        self._add_groupbox(1, 1, _('Metadata Jackets'), JACKET_OPTIONS, options)
-        self._add_groupbox(2, 1, _('Covers'), COVER_OPTIONS, options)
-        self._add_groupbox(3, 1, _('Metadata'), METADATA_OPTIONS, options)
+        self._add_groupbox(1, 0, _('HTML && Styles'), STYLE_OPTIONS, options)
+        self._add_groupbox(1, 1, _('Import Options'), IMPORT_OPTIONS, options)
 
         layout.addSpacing(10)
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)

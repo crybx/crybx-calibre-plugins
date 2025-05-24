@@ -28,7 +28,7 @@ To invoke this script:
     
     args              - One or more of the following values:
     
-        FILE_OPTIONS
+        META_OPTIONS
             --remove_itunes_files
             --remove_calibre_bookmarks
             --remove_os_artifacts
@@ -37,39 +37,9 @@ To invoke this script:
 			--strip_spans
 			--strip_kobo
         
-        MANIFEST_OPTIONS
-            --remove_missing_files
+        META_OPTIONS
             --add_unmanifested_files
-            --remove_unmanifested_files
         
-        ADOBE_OPTIONS
-            --zero_xpgt_margins
-            --remove_xpgt_files
-            --remove_drm_meta_tags
-        
-        TOC_OPTIONS
-            --flatten_toc
-            --remove_broken_ncx_links
-        
-        STYLE_OPTIONS
-            --encode_html_utf8
-            --remove_embedded_fonts
-            --rewrite_css_margins
-            --append_extra_css
-            --smarten_punctuation
-            --remove_javascript
-        
-        JACKET_OPTIONS
-            --remove_all_jackets
-            --remove_legacy_jackets
-        
-        COVER_OPTIONS
-            --remove_broken_covers
-            --remove_cover
-            --insert_replace_cover "path_to_image"
-        
-        METADATA_OPTIONS
-            --remove_non_dc_elements
 
 e.g. To view the help output listing command arguments:
     calibre-debug -e me.py --help
