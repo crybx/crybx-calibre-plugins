@@ -9,7 +9,7 @@ Provides pattern loading, validation, and application functionality.
 import re
 import json
 
-from pattern_definitions import get_patterns
+from calibre_plugins.epubaholic.pattern_definitions import get_patterns
 
 
 

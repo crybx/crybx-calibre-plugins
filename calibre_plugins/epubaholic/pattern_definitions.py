@@ -88,7 +88,7 @@ class IncludePattern:
 class PatternSet:
     """A set of related patterns with a name."""
 
-    def __init__(self, name: str, patterns: List[Union[SimplePattern, RegexPattern, IncludePattern, SmartPunctuationPattern]]):
+    def __init__(self, name: str, patterns: List[Union[SimplePattern, RegexPattern, IncludePattern]]):
         """
         Initialize a pattern set.
 
@@ -269,7 +269,6 @@ PATTERN_SETS = [
     PatternSet("strip-style", strip_style_patterns),
     PatternSet("capitalize-start-of-tags", capitalize_start_of_tags_patterns),
     PatternSet("female-to-male", female_to_male_patterns),
-    PatternSet("dumb-punctuation", dumb_punctuation_patterns),
     PatternSet("british-to-american", british_to_american_patterns),
     PatternSet("american-to-british", american_to_british_patterns),
 ]

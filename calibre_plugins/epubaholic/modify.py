@@ -569,7 +569,33 @@ class BookModifier(object):
         pass
 
     def _capitalize_paragraphs(self, container):
-        pass
+        dirtied = False
+        self.log('\tCapitalizing first letter of paragraphs')
+        if container.is_drm_encrypted():
+            self.log('ERROR - cannot capitalize paragraphs in DRM encrypted book')
+            return False
+
+        from calibre_plugins.epubaholic.text_replacement_utils import apply_replacements_to_content
+
+        # Define the capitalization pattern based on capitalize_start_of_tags_patterns
+        capitalize_patterns = [{
+            "regex": r"<p([^>]*)>([\"“'‘]?)(\\.{3}|…)?([a-z])",
+            "replace": r"<p\1>\2\3\4",
+            "transform": "uppercase",
+            "transform_group": 4
+        }]
+
+        for name in container.get_html_names():
+            html = container.get_raw(name)
+            new_html, replacement_count = apply_replacements_to_content(html, capitalize_patterns)
+            
+            if replacement_count > 0:
+                dirtied = True
+                new_html = strip_encoding_declarations(new_html)
+                container.set(name, new_html)
+                self.log('\t  Capitalized %d paragraphs in: %s' % (replacement_count, name))
+        
+        return dirtied
 
     def _normalize_names(self, container):
         pass
