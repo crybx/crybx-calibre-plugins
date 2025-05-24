@@ -566,7 +566,30 @@ class BookModifier(object):
         pass
 
     def _consistent_ellipsis(self, container):
-        pass
+        dirtied = False
+        self.log('\tApplying consistent ellipsis')
+        if container.is_drm_encrypted():
+            self.log('ERROR - cannot apply consistent ellipsis in DRM encrypted book')
+            return False
+
+        from calibre_plugins.epubaholic.text_replacement_utils import apply_replacements_to_content
+        from calibre_plugins.epubaholic.pattern_definitions import get_patterns
+
+        # Get the consistent ellipsis patterns
+        all_patterns = get_patterns()
+        ellipsis_patterns = all_patterns.get('consistent-ellipsis', [])
+
+        for name in container.get_html_names():
+            html = container.get_raw(name)
+            new_html, replacement_count = apply_replacements_to_content(html, ellipsis_patterns)
+            
+            if replacement_count > 0:
+                dirtied = True
+                new_html = strip_encoding_declarations(new_html)
+                container.set(name, new_html)
+                self.log('\t  Applied %d ellipsis replacements in: %s' % (replacement_count, name))
+        
+        return dirtied
 
     def _capitalize_paragraphs(self, container):
         dirtied = False
