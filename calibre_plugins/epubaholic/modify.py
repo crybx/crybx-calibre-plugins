@@ -647,4 +647,27 @@ class BookModifier(object):
         pass
 
     def _female_to_male(self, container):
-        pass
+        dirtied = False
+        self.log('\tConverting female pronouns to male')
+        if container.is_drm_encrypted():
+            self.log('ERROR - cannot convert female to male in DRM encrypted book')
+            return False
+
+        from calibre_plugins.epubaholic.text_replacement_utils import apply_replacements_to_content
+        from calibre_plugins.epubaholic.pattern_definitions import get_patterns
+
+        # Get the female to male conversion patterns
+        all_patterns = get_patterns()
+        conversion_patterns = all_patterns.get('female-to-male', [])
+
+        for name in container.get_html_names():
+            html = container.get_raw(name)
+            new_html, replacement_count = apply_replacements_to_content(html, conversion_patterns)
+            
+            if replacement_count > 0:
+                dirtied = True
+                new_html = strip_encoding_declarations(new_html)
+                container.set(name, new_html)
+                self.log('\t  Made %d female-to-male conversions in: %s' % (replacement_count, name))
+        
+        return dirtied
