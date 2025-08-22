@@ -116,12 +116,55 @@ class ModifyEpubAction(InterfaceAction):
 
     def _proceed_with_updating_epubs(self, payload):
         modified_epubs_map, tdir = payload
+        
+        # Check for custom metadata updates and apply them to the database
+        custom_metadata_updates = {}
+        for book_id, result in modified_epubs_map.items():
+            if isinstance(result, tuple) and len(result) == 2:
+                epub_path, custom_metadata = result
+                if custom_metadata:
+                    custom_metadata_updates[book_id] = custom_metadata
+        
+        if custom_metadata_updates:
+            self._update_custom_columns(custom_metadata_updates)
+        
         AddBooksProgressDialog(self.gui, modified_epubs_map, tdir)
         self.gui.tags_view.recount()
         if self.gui.current_view() is self.gui.library_view:
             current = self.gui.library_view.currentIndex()
             if current.isValid():
                 self.gui.library_view.model().current_changed(current, QModelIndex())
+
+    def _update_custom_columns(self, custom_metadata_updates):
+        """Update custom columns in Calibre's database"""
+        db = self.gui.current_db
+        db_ref = db.new_api if hasattr(db, 'new_api') else db
+        
+        # Group updates by column name
+        col_name_books_map = {}
+        book_ids_to_update = []
+        
+        for book_id, custom_metadata in custom_metadata_updates.items():
+            if db_ref.has_id(book_id):
+                for col_name, value in custom_metadata.items():
+                    if col_name not in col_name_books_map:
+                        col_name_books_map[col_name] = {}
+                    col_name_books_map[col_name][book_id] = value
+                    if book_id not in book_ids_to_update:
+                        book_ids_to_update.append(book_id)
+        
+        # Apply updates to database
+        for col_name, book_values_map in col_name_books_map.items():
+            try:
+                db_ref.set_field(col_name, book_values_map)
+            except Exception as e:
+                print(f"Failed to update custom column {col_name}: {str(e)}")
+        
+        # Refresh the UI
+        if book_ids_to_update:
+            self.gui.library_view.model().refresh_ids(book_ids_to_update)
+            self.gui.library_view.model().refresh_ids(book_ids_to_update,
+                                      current_row=self.gui.library_view.currentIndex().row())
 
     def _cancel_updating_epubs(self, payload):
         _modified_epubs_map, tdir = payload

@@ -260,7 +260,12 @@ class AddBooksProgressDialog(QProgressDialog):
         if self.i >= self.total_count:
             return self.do_close()
         book_id = self.book_ids[self.i]
-        epub_path = self.modified_epubs[book_id]
+        result = self.modified_epubs[book_id]
+        # Handle both string paths and (path, custom_metadata) tuples
+        if isinstance(result, tuple):
+            epub_path = result[0]
+        else:
+            epub_path = result
         self.i += 1
 
         title = self.db.title(book_id, index_is_id=True)

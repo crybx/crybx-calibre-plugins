@@ -40,18 +40,48 @@ class TAG:
 def modify_epub(log, title, epub_path, calibre_opf_path, cover_path, options):
     start_time = time.time()
     modifier = BookModifier(log)
-    new_book_path = modifier.process_book(title, epub_path, calibre_opf_path, cover_path, options)
+    result = modifier.process_book(title, epub_path, calibre_opf_path, cover_path, options)
+    
+    if isinstance(result, tuple):
+        new_book_path, custom_metadata = result
+    else:
+        new_book_path, custom_metadata = result, {}
+    
     if new_book_path:
         log('epub updated in %.2f seconds'%(time.time() - start_time))
+        if custom_metadata:
+            return (new_book_path, custom_metadata)
+        else:
+            return new_book_path
     else:
         log('epub not changed after %.2f seconds'%(time.time() - start_time))
-    return new_book_path
+        return new_book_path
 
 
 class BookModifier(object):
 
     def __init__(self, log):
         self.log = log
+        self._debug_file_path = None
+    
+    def _debug_log(self, message, book_title=None):
+        """Log debug messages to the book-specific folder for future debugging"""
+        if book_title:
+            try:
+                import datetime
+                # Clean title for folder name (same as in _import_chapters)
+                clean_title = re.sub(r'[\\/:*?"<>|]', '', book_title)
+                debug_path = os.path.join('R:/epub-manipulator/added-chapters', clean_title)
+                
+                # Add date and time to filename
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                debug_file = os.path.join(debug_path, f'epubaholic_debug_{timestamp}.log')
+                
+                with open(debug_file, 'a') as f:
+                    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    f.write(f"[{current_time}] {message}\n")
+            except:
+                pass
 
     def process_book(self, title, epub_path, calibre_opf_path, cover_path, options):
         self.log('  Modifying: ', epub_path)
@@ -77,10 +107,40 @@ class BookModifier(object):
                     is_modified = self._process_book(container, options)
                     if is_modified:
                         container.write(epub_path)
+                        
+                        # If chapters were imported, update both metadata and OPF
+                        if options['import_chapters'] and hasattr(self, '_pending_lastimport_value'):
+                            self.log('\tUpdating metadata after chapter import')
+                            
+                            # Update metadata for Calibre database
+                            with open(epub_path, 'r+b') as f:
+                                with apply_null_metadata:
+                                    set_metadata(f, self.mi, stream_type='epub')
+                            is_metadata_updated = True
+                            
+                            # Update OPF file directly to preserve custom columns
+                            try:
+                                with TemporaryDirectory('_update-opf') as temp_dir:
+                                    with CurrentDir(temp_dir):
+                                        zipextract(epub_path, temp_dir)
+                                        temp_container = ExtendedContainer(temp_dir, self.log)
+                                        if hasattr(self, '_pending_lastimport_debug_file'):
+                                            debug_file = self._pending_lastimport_debug_file
+                                        else:
+                                            debug_file = None
+                                        success = self._update_opf_custom_column(temp_container, '#lastimport', self._pending_lastimport_value, debug_file)
+                                        if success:
+                                            temp_container.write(epub_path)
+                            except Exception as e:
+                                self.log('\t  Failed to update OPF:', str(e))
 
             # Only return path to the epub if we have changed it
             if is_metadata_updated or is_modified:
-                return epub_path
+                # Check if we have custom metadata updates to return
+                if hasattr(self, '_custom_metadata_updates'):
+                    return (epub_path, self._custom_metadata_updates)
+                else:
+                    return epub_path
         except:
             self.log.exception('%s - ERROR: %s' % (title, traceback.format_exc()))
         finally:
@@ -185,6 +245,82 @@ class BookModifier(object):
             return None
 
         return search_data.split(',')
+
+    def _set_lastimport(self, container, chapter_num, debug_path=None):
+        self.log('\tSetting lastimport column to:', chapter_num)
+        
+        if hasattr(self, 'mi') and self.mi:
+            lastimport_value = str(chapter_num)
+            
+            # Set in metadata object for Calibre database
+            try:
+                self.mi.set('#lastimport', lastimport_value)
+                user_metadata = self.mi.get_user_metadata('#lastimport', make_copy=True)
+                if user_metadata:
+                    user_metadata['#value#'] = lastimport_value
+                    self.mi.set_user_metadata('#lastimport', user_metadata)
+            except Exception as e:
+                self.log('\t  Error setting metadata:', str(e))
+                return False
+            
+            # Store for OPF update and action layer
+            self._pending_lastimport_value = lastimport_value
+            
+            if not hasattr(self, '_custom_metadata_updates'):
+                self._custom_metadata_updates = {}
+            self._custom_metadata_updates['#lastimport'] = lastimport_value
+            
+            self.log('\t  Set lastimport to %s' % lastimport_value)
+            return True
+        else:
+            self.log('\t  No metadata object available')
+            return False
+
+    def _update_opf_custom_column(self, container, column_name, value, debug_file=None):
+        """Update custom column value directly in the OPF file while preserving ALL custom metadata"""
+        if not container.opf_name:
+            return False
+
+        import json
+        
+        # Get the metadata section
+        metadata = container.opf.xpath('//opf:metadata', namespaces={'opf': OPF_NS})[0]
+        
+        # Collect ALL custom metadata from ALL calibre:user_metadata elements
+        all_custom_metadata = {}
+        elements_to_remove = []
+        
+        for child in metadata:
+            if child.get('property') == 'calibre:user_metadata':
+                try:
+                    custom_metadata = ''.join(child.itertext())
+                    parsed_metadata = json.loads(custom_metadata)
+                    all_custom_metadata.update(parsed_metadata)
+                    elements_to_remove.append(child)
+                except (json.JSONDecodeError, KeyError):
+                    continue
+        
+        # Update our target column
+        if column_name not in all_custom_metadata:
+            return False
+            
+        all_custom_metadata[column_name]['#value#'] = value
+        
+        # Remove old elements and create new consolidated element
+        for element in elements_to_remove:
+            metadata.remove(element)
+        
+        if all_custom_metadata:
+            from lxml import etree
+            meta_elem = etree.SubElement(metadata, '{%s}meta' % OPF_NS)
+            meta_elem.set('property', 'calibre:user_metadata')
+            meta_elem.text = json.dumps(all_custom_metadata)
+            meta_elem.tail = '\n    '
+            
+            container.set(container.opf_name, container.opf)
+            return True
+        
+        return False
 
     def _process_search_term(self, term, all_files, existing_matches=None):
         """
@@ -314,6 +450,13 @@ class BookModifier(object):
         title = re.sub(r'[\\/:*?"<>|]', '', title)
         new_chapters_path = os.path.join('R:/epub-manipulator/added-chapters', title)
         self._move_chapter_files(chapter_files, chapters_path, new_chapters_path)
+        
+        # Set the lastimport column with the last (highest) chapter number
+        if chapter_files:
+            last_chapter_num = get_chapter_number(chapter_files[-1])
+            # Pass the new_chapters_path for debug logging
+            self._set_lastimport(container, last_chapter_num, new_chapters_path)
+        
         return True
 
     def _remove_files_if_exist(self, container, files):
