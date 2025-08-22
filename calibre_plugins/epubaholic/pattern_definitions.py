@@ -144,10 +144,10 @@ female_to_male_patterns = [
     RegexPattern(" her['’]?s([.,!? ])", " his\\1"),
     RegexPattern(" her([.,!?])", " him\\1"),
     RegexPattern(
-        " her\\b(?= (a|about|above|across|after|again|against|along|amid|amidst|among|amongst|an|and|any|around|as|at|away|before|behind|below)\\b)",
+        " her\\b(?= (a|about|above|across|after|again|against|along|amid|amidst|among|amongst|an|and|any|around|as|at|away|because|before|behind|below)\\b)",
         " him"),
     RegexPattern(
-        " her\\b(?= (beneath|beside|besides|between|beyond|but|by|concerning|despite|down|during|except|for|from|in|inside)\\b)",
+        " her\\b(?= (beneath|beside|besides|between|beyond|but|by|concerning|despite|down|during|except|for|from|had|has|have|in|inside)\\b)",
         " him"),
     RegexPattern(
         " her\\b(?= (into|like|myself|near|no|not|of|off|on|onto|out|over|past|per|plus|quite|regarding|since|so|some|something|than)\\b)",
