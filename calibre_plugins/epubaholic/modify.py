@@ -453,9 +453,11 @@ class BookModifier(object):
         
         # Set the lastimport column with the last (highest) chapter number
         if chapter_files:
-            last_chapter_num = get_chapter_number(chapter_files[-1])
+            # Extract digit groups separated by dots for display (e.g., "v1c14" → "1.14")
+            digit_groups = re.findall(r'\d+', chapter_files[-1])
+            display_num = '.'.join(digit_groups) if digit_groups else '0'
             # Pass the new_chapters_path for debug logging
-            self._set_lastimport(container, last_chapter_num, new_chapters_path)
+            self._set_lastimport(container, display_num, new_chapters_path)
         
         return True
 
