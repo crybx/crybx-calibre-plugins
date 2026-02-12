@@ -135,8 +135,8 @@ capitalize_start_of_tags_patterns = [
 female_to_male_patterns = [
     SimplePattern("She ", "He "),
     SimplePattern(" she ", " he "),
-    RegexPattern("She(['’ ])", "He\\1"),
-    RegexPattern(" she(['’ ])", " he\\1"),
+    RegexPattern("She(['’, ])", "He\\1"),
+    RegexPattern(" she(['’, ])", " he\\1"),
     SimplePattern("Herself", "Himself"),
     SimplePattern("herself", "himself"),
     SimplePattern("Her ", "His "),
@@ -144,19 +144,19 @@ female_to_male_patterns = [
     RegexPattern(" her['’]?s([.,!? ])", " his\\1"),
     RegexPattern(" her([.,!?])", " him\\1"),
     RegexPattern(
-        " her\\b(?= (a|about|above|across|after|again|against|along|amid|amidst|among|amongst|an|and|any|around|as|at|away|because|before|behind|below)\\b)",
+        " her\\b(?= (a|all|about|above|across|after|again|against|along|amid|amidst|among|amongst|an|and|any|around|as|at|away|because|before|behind|being|below)\\b)",
         " him"),
     RegexPattern(
-        " her\\b(?= (beneath|beside|besides|between|beyond|but|by|concerning|despite|down|during|except|for|from|had|has|have|in|inside)\\b)",
+        " her\\b(?= (beneath|beside|besides|between|beyond|but|by|concerning|despite|down|during|either|even|except|for|from|if|in|inside)\\b)",
         " him"),
     RegexPattern(
-        " her\\b(?= (into|like|myself|near|no|not|of|off|on|onto|out|over|past|per|plus|quite|regarding|since|so|some|something|than)\\b)",
+        " her\\b(?= (into|like|myself|near|no|not|of|off|on|onto|or|out|over|past|per|plus|quite|regarding|since|so|some|something|such|than)\\b)",
         " him"),
     RegexPattern(
-        " her\\b(?= (that|through|throughout|to|toward|towards|under|underneath|unlike|up|versus|what|with|within|without)\\b)",
+        " her\\b(?= (that|the|through|throughout|to|toward|towards|under|underneath|unlike|up|versus|what|when|while|with|within|without|would)\\b)",
         " him"),
-    RegexPattern(" her\\b(?= (feel|go|going|want|wanted|was)\\b)", " him"),
-    RegexPattern(" her\\b(?= (gently|quietly|roughly|sternly|sweetly)\\b)", " him"),
+    RegexPattern(" her\\b(?= (being|explain|feel|get|go|going|had|has|have|having|sit|want|wanted|was|were)\\b)", " him"),
+    RegexPattern(" her\\b(?= (gently|quietly|roughly|sternly|sweetly|tightly)\\b)", " him"),
     RegexPattern(" her (\\w+)", " his \\1")
 ]
 
