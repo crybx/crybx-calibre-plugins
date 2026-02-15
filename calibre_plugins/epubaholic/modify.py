@@ -341,27 +341,32 @@ class BookModifier(object):
 
         self.log('  Searching for chapters: ', term)
 
-        if '+' in term:  # Inclusion rule (AND)
-            # Split the term into parts that must all be present
-            include_parts = [part.strip().lower() for part in term.split('+')]
+        if '+' in term or '!' in term:
+            # Split on both + and ! while tracking which delimiter was used
+            # e.g. "title+ridibooks!final" → include [title, ridibooks], exclude [final]
+            import re as _re
+            # Split into tokens, keeping the delimiters
+            tokens = _re.split(r'([+!])', term)
+            include_parts = [tokens[0].strip().lower()]
+            exclude_parts = []
+            i = 1
+            while i < len(tokens) - 1:
+                delimiter = tokens[i]
+                part = tokens[i + 1].strip().lower()
+                if delimiter == '+':
+                    include_parts.append(part)
+                elif delimiter == '!':
+                    exclude_parts.append(part)
+                i += 2
+
+            # Filter out empty strings from splitting
+            include_parts = [p for p in include_parts if p]
+            exclude_parts = [p for p in exclude_parts if p]
 
             for filename in all_files:
                 filename_lower = filename.lower()
-                # All parts must be present for this to match
-                if all(part in filename_lower for part in include_parts):
-                    if filename not in matching_files:
-                        matching_files.append(filename)
-
-        elif '!' in term:  # Exclusion rule (NOT)
-            # Split into main term and exclusion term
-            parts = term.split('!')
-            main_term = parts[0].strip().lower()
-            exclude_term = parts[1].strip().lower()
-
-            for filename in all_files:
-                filename_lower = filename.lower()
-                # Main term must be present, exclusion term must not be present
-                if main_term in filename_lower and exclude_term not in filename_lower:
+                if (all(part in filename_lower for part in include_parts) and
+                        not any(part in filename_lower for part in exclude_parts)):
                     if filename not in matching_files:
                         matching_files.append(filename)
 
