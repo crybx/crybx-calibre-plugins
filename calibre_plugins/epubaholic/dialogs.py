@@ -51,6 +51,7 @@ STYLE_OPTIONS = [
     ('inline_styles_to_tags', _('Replace inline styles with tags'), _('Replace inline css styles with appropriate tags')),
     ('strip_leftover_styles', _('Strip leftover styles'), _('Remove styles leftover after replacing inline css styles with tags')),
     ('strip_spans', _('Strip spans'), _('Remove spans without attributes')),
+    ('lily_junk_cleanup', _('Lily junk cleanup'), _('Remove Lily HTML junk')),
 ]
 
 IMPORT_OPTIONS = [
@@ -99,10 +100,10 @@ class ModifyEpubDialog(SizePersistedDialog):
         layout.addLayout(self.main_layout, 1)
         options = gprefs.get(self.unique_pref_name+':settings', {})
 
-        self._add_groupbox(0, 0, _('Meta'), META_OPTIONS, options)
+        self._add_groupbox(0, 0, _('HTML && Styles'), STYLE_OPTIONS, options)
         self._add_groupbox(0, 1, _('Text Replacements'), TEXTREPLACE_OPTIONS, options)
 
-        self._add_groupbox(1, 0, _('HTML && Styles'), STYLE_OPTIONS, options)
+        self._add_groupbox(1, 0, _('Meta'), META_OPTIONS, options)
         self._add_groupbox(1, 1, _('Import Options'), IMPORT_OPTIONS, options)
 
         layout.addSpacing(10)

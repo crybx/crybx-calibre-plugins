@@ -193,6 +193,8 @@ class BookModifier(object):
             is_changed |= self._import_chapters(container)
         
         # HTML AND CSS CHANGES
+        if options['lily_junk_cleanup']:
+            is_changed |= self._lily_junk_cleanup(container)
         if options['inline_styles_to_tags']:
             is_changed |= self._inline_styles_to_tags(container)
         if options['strip_leftover_styles']:
@@ -548,6 +550,52 @@ class BookModifier(object):
             container.set(container.opf_name, container.opf)
         return dirtied
 
+
+    def _lily_junk_cleanup(self, container):
+        dirtied = False
+        self.log('\tApplying Lily junk cleanup')
+        if container.is_drm_encrypted():
+            self.log('ERROR - cannot apply Lily junk cleanup to DRM encrypted book')
+            return False
+
+        for name in container.get_html_names():
+            html = container.get_raw(name)
+            original_html = html
+
+            # 1. Remove tags with children (code, bdi, ruby, samp, kbd, rt, rp)
+            prev = None
+            while prev != html:
+                prev = html
+                html = re.sub(r'<(code|bdi|ruby|samp|kbd|rt|rp)\b[^>]*>.*?</\1>', '', html, flags=re.DOTALL)
+
+            # 2. Remove void wbr tags
+            html = re.sub(r'<wbr\b[^>]*/?>',  '', html)
+
+            # 3. Unwrap span tags (remove tag, keep children)
+            prev = None
+            while prev != html:
+                prev = html
+                html = re.sub(r'<span\b[^>]*>(.*?)</span>', r'\1', html, flags=re.DOTALL)
+
+            # 4. Remove class attribute from p tags
+            html = re.sub(r'(<p\b[^>]*?)\s+class="[^"]*"', r'\1', html)
+
+            # 5. Remove zero-width/invisible Unicode characters
+            html = re.sub(r'[\u200B-\u200F\u2060\uFEFF\u00AD]', '', html)
+
+            # 6. Remove xml encoding comment
+            html = html.replace('<!--?xml encoding="utf-8"?-->', '')
+
+            # 7. Collapse double spaces to single space
+            html = re.sub(r'  ', ' ', html)
+
+            if html != original_html:
+                dirtied = True
+                html = strip_encoding_declarations(html)
+                container.set(name, html)
+                self.log('\t  Cleaned up junk HTML in:', name)
+
+        return dirtied
 
     def _smarten_punctuation(self, container):
         from calibre.ebooks.conversion.preprocess import smarten_punctuation
