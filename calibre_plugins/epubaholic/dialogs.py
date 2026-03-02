@@ -36,6 +36,7 @@ META_OPTIONS = [
     ('update_metadata', _('Update metadata'), _('Update the manifest with the latest calibre metadata\nand replace an existing identifiable cover if possible.')),
     ('add_unmanifested_files', _('Add unmanifested files to manifest'), _('Add files to manifest that are in the epub but do not exist in the .opf manifest\n(excluding iTunes/calibre bookmarks)')),
     ('remove_calibre_bookmarks', _('Remove calibre bookmark files'), _('Remove any bookmark files added by the calibre ebook viewer')),
+    ('save_title_author_to_description', _('Save title and author to description'), _('Prepend "title by author" to the top of the description field')),
 ]
 
 TEXTREPLACE_OPTIONS = [
@@ -57,6 +58,7 @@ STYLE_OPTIONS = [
 IMPORT_OPTIONS = [
     ('import_chapters', _('Import chapters'), _('Import chapters from a folder of html files')),
     ('appy_replacements_to_imports', _('Apply replacements to imported chapters'), _('Apply the text replacements selected to the imported chapters as well')),
+    ('update_contents_with_lastimport', _('Update contents with last import chapter'), _('Copy the #lastimport column value to the #contents column')),
     # Apply replacements to existing chapters
     # Apply replacements to chapter range
     #   [ ] to [ ] (e.g. 0 to 10 or 50 to last)
@@ -121,7 +123,8 @@ class ModifyEpubDialog(SizePersistedDialog):
         self.restore_button.clicked.connect(self._restore_clicked)
         layout.addWidget(button_box)
 
-        # Cause our dialog size to be restored from prefs or created on first usage
+        # Reset saved geometry so the dialog resizes to fit new options
+        self.geom = None
         self.resize_dialog()
 
     def _add_groupbox(self, row, col, title, option_info, options):

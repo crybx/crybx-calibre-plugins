@@ -89,6 +89,11 @@ class BookModifier(object):
             self._restore_metadata_from_opf(calibre_opf_path, cover_path)
             self._setup_user_options()
 
+            # Prepend title/author to description before metadata update
+            # so the epub also gets the updated description if both options are checked
+            if options['save_title_author_to_description']:
+                self._save_title_author_to_description()
+
             # If the user is updating metadata, we need to do this as a separate
             # step at the start, because it takes a stream object as input so is
             # run before we have written any container changes to disk below.
@@ -135,9 +140,10 @@ class BookModifier(object):
                                 self.log('\t  Failed to update OPF:', str(e))
 
             # Only return path to the epub if we have changed it
-            if is_metadata_updated or is_modified:
+            has_custom_updates = hasattr(self, '_custom_metadata_updates') and self._custom_metadata_updates
+            if is_metadata_updated or is_modified or has_custom_updates:
                 # Check if we have custom metadata updates to return
-                if hasattr(self, '_custom_metadata_updates'):
+                if has_custom_updates:
                     return (epub_path, self._custom_metadata_updates)
                 else:
                     return epub_path
@@ -163,6 +169,33 @@ class BookModifier(object):
         # Store our link to a copy of the book cover, so that we can perform
         # functions such as replacing the cover image.
         self.cover_path = cover_path
+
+    def _save_title_author_to_description(self):
+        """Prepend 'title by author' to the description/comments field"""
+        self.log('\tSaving title and author to description')
+
+        if not hasattr(self, 'mi') or not self.mi:
+            self.log('\t  No metadata object available')
+            return
+
+        from calibre.ebooks.metadata import authors_to_string
+
+        title = self.mi.title or ''
+        authors = authors_to_string(self.mi.authors) if self.mi.authors else ''
+
+        if not title:
+            self.log('\t  No title found')
+            return
+
+        header = '%s by %s' % (title, authors) if authors else title
+        existing = self.mi.comments or ''
+        new_comments = '<p>%s</p>\n%s' % (header, existing)
+        self.mi.comments = new_comments
+
+        if not hasattr(self, '_custom_metadata_updates'):
+            self._custom_metadata_updates = {}
+        self._custom_metadata_updates['comments'] = new_comments
+        self.log('\t  Added: %s' % header)
 
     def _update_metadata_and_cover(self, epub_path):
         self.log('\tUpdating metadata and cover')
@@ -218,6 +251,10 @@ class BookModifier(object):
         # Imports if selected to not be included in other changes
         if options['import_chapters'] and not apply_changes_to_imports:
             is_changed |= self._import_chapters(container)
+
+        # Copy #lastimport to #contents (after imports so we get the latest value)
+        if options['update_contents_with_lastimport']:
+            self._update_contents_from_lastimport(container)
 
         return is_changed
 
@@ -277,6 +314,53 @@ class BookModifier(object):
         else:
             self.log('\t  No metadata object available')
             return False
+
+    def _get_custom_column_value(self, container, column_name):
+        """Read a custom column value from the OPF metadata"""
+        if not container.opf_name:
+            return None
+
+        metadata = container.opf.xpath('//opf:metadata', namespaces={'opf': OPF_NS})[0]
+
+        # EPUB 3 format
+        for child in metadata:
+            if child.get('property') == 'calibre:user_metadata':
+                try:
+                    custom_metadata = ''.join(child.itertext())
+                    parsed = json.loads(custom_metadata)
+                    if column_name in parsed:
+                        return parsed[column_name].get('#value#')
+                except (json.JSONDecodeError, KeyError):
+                    continue
+
+        # EPUB 2 fallback
+        meta_item = container.get_meta_content_item('calibre:user_metadata:' + column_name)
+        if meta_item is not None:
+            try:
+                return json.loads(meta_item.get('content'))['#value#']
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        return None
+
+    def _update_contents_from_lastimport(self, container):
+        """Copy #lastimport value to #contents custom column"""
+        self.log('\tCopying lastimport to contents')
+
+        # Prefer pending value (set by import_chapters in same run)
+        if hasattr(self, '_custom_metadata_updates') and '#lastimport' in self._custom_metadata_updates:
+            value = self._custom_metadata_updates['#lastimport']
+        else:
+            value = self._get_custom_column_value(container, '#lastimport')
+
+        if not value:
+            self.log('\t  No lastimport value found')
+            return
+
+        if not hasattr(self, '_custom_metadata_updates'):
+            self._custom_metadata_updates = {}
+        self._custom_metadata_updates['#contents'] = value
+        self.log('\t  Set contents to:', value)
 
     def _update_opf_custom_column(self, container, column_name, value, debug_file=None):
         """Update custom column value directly in the OPF file while preserving ALL custom metadata"""
