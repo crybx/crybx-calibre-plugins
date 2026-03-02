@@ -14,11 +14,6 @@ except ImportError:
                       QGroupBox, Qt, QDialogButtonBox, QWidget,
                       QProgressDialog, QTimer, QScrollArea)
 
-try:
-    load_translations()
-except NameError:
-    pass # load_translations() added in calibre 1.9
-
 # QWidget and QScrollArea added to support scrolling dialog box
 
 from calibre.ebooks.metadata import authors_to_string
@@ -33,32 +28,32 @@ from calibre_plugins.epubaholic.common_widgets import ImageTitleLayout
 
 
 META_OPTIONS = [
-    ('update_metadata', _('Update metadata'), _('Update the manifest with the latest calibre metadata\nand replace an existing identifiable cover if possible.')),
-    ('add_unmanifested_files', _('Add unmanifested files to manifest'), _('Add files to manifest that are in the epub but do not exist in the .opf manifest\n(excluding iTunes/calibre bookmarks)')),
-    ('remove_calibre_bookmarks', _('Remove calibre bookmark files'), _('Remove any bookmark files added by the calibre ebook viewer')),
-    ('save_title_author_to_description', _('Save title and author to description'), _('Prepend "title by author" to the top of the description field')),
+    ('update_metadata', 'Update metadata', 'Update the manifest with the latest calibre metadata\nand replace an existing identifiable cover if possible.'),
+    ('add_unmanifested_files', 'Add unmanifested files to manifest', 'Add files to manifest that are in the epub but do not exist in the .opf manifest\n(excluding iTunes/calibre bookmarks)'),
+    ('remove_calibre_bookmarks', 'Remove calibre bookmark files', 'Remove any bookmark files added by the calibre ebook viewer'),
+    ('save_title_author_to_description', 'Save title and author to description', 'Prepend "title by author" to the top of the description field'),
 ]
 
 TEXTREPLACE_OPTIONS = [
-    ('smarten_punctuation', _('Smarten punctuation'), _('Convert html to use smart quotes and emdash characters')),
-    ('consistent_ellipsis', _('Consistent ellipsis'), _('Standardizes...ellipses formatting')),
-    ('capitalize_paragraphs', _('Capitalize paragraphs'), _('Makes all paragraphs start with a capital letter')),
-    ('normalize_names', _('Normalize names'), _('Standardizes different spellings of character names')),
-    ('female-to-male', _('Change female to male'), _('Changes all female pronouns to male pronouns')),
+    ('smarten_punctuation', 'Smarten punctuation', 'Convert html to use smart quotes and emdash characters'),
+    ('consistent_ellipsis', 'Consistent ellipsis', 'Standardizes...ellipses formatting'),
+    ('capitalize_paragraphs', 'Capitalize paragraphs', 'Makes all paragraphs start with a capital letter'),
+    ('normalize_names', 'Normalize names', 'Standardizes different spellings of character names'),
+    ('female-to-male', 'Change female to male', 'Changes all female pronouns to male pronouns'),
     # I've run out of room in this box
 ]
 
 STYLE_OPTIONS = [
-    ('inline_styles_to_tags', _('Replace inline styles with tags'), _('Replace inline css styles with appropriate tags')),
-    ('strip_leftover_styles', _('Strip leftover styles'), _('Remove styles leftover after replacing inline css styles with tags')),
-    ('strip_spans', _('Strip spans'), _('Remove spans without attributes')),
-    ('lily_junk_cleanup', _('Lily junk cleanup'), _('Remove Lily HTML junk')),
+    ('inline_styles_to_tags', 'Replace inline styles with tags', 'Replace inline css styles with appropriate tags'),
+    ('strip_leftover_styles', 'Strip leftover styles', 'Remove styles leftover after replacing inline css styles with tags'),
+    ('strip_spans', 'Strip spans', 'Remove spans without attributes'),
+    ('lily_junk_cleanup', 'Lily junk cleanup', 'Remove Lily HTML junk'),
 ]
 
 IMPORT_OPTIONS = [
-    ('import_chapters', _('Import chapters'), _('Import chapters from a folder of html files')),
-    ('appy_replacements_to_imports', _('Apply replacements to imported chapters'), _('Apply the text replacements selected to the imported chapters as well')),
-    ('update_contents_with_lastimport', _('Update contents with last import chapter'), _('Copy the #lastimport column value to the #contents column')),
+    ('import_chapters', 'Import chapters', 'Import chapters from a folder of html files'),
+    ('appy_replacements_to_imports', 'Apply replacements to imported chapters', 'Apply the text replacements selected to the imported chapters as well'),
+    ('update_contents_with_lastimport', 'Update contents with last import chapter', 'Copy the #lastimport column value to the #contents column'),
     # Apply replacements to existing chapters
     # Apply replacements to chapter range
     #   [ ] to [ ] (e.g. 0 to 10 or 50 to last)
@@ -74,10 +69,10 @@ class ModifyEpubDialog(SizePersistedDialog):
         self.plugin_action = plugin_action
         # This is what determines what options were already selected from previous use
         SizePersistedDialog.__init__(self, gui, 'epubaholic plugin:options dialog')
-        self.setWindowTitle(_('Epubaholic'))
+        self.setWindowTitle('Epubaholic')
         layout = QVBoxLayout(self)
         self.setLayout(layout)
-        title_layout = ImageTitleLayout(self, 'images/epubaholic_book.png', _('Epubaholic Options'))
+        title_layout = ImageTitleLayout(self, 'images/epubaholic_book.png', 'Epubaholic Options')
         layout.addLayout(title_layout)
 
         # Add hyperlink to a help file at the right. We will replace the correct name when it is clicked.
@@ -102,24 +97,24 @@ class ModifyEpubDialog(SizePersistedDialog):
         layout.addLayout(self.main_layout, 1)
         options = gprefs.get(self.unique_pref_name+':settings', {})
 
-        self._add_groupbox(0, 0, _('HTML && Styles'), STYLE_OPTIONS, options)
-        self._add_groupbox(0, 1, _('Text Replacements'), TEXTREPLACE_OPTIONS, options)
+        self._add_groupbox(0, 0, 'HTML && Styles', STYLE_OPTIONS, options)
+        self._add_groupbox(0, 1, 'Text Replacements', TEXTREPLACE_OPTIONS, options)
 
-        self._add_groupbox(1, 0, _('Meta'), META_OPTIONS, options)
-        self._add_groupbox(1, 1, _('Import Options'), IMPORT_OPTIONS, options)
+        self._add_groupbox(1, 0, 'Meta', META_OPTIONS, options)
+        self._add_groupbox(1, 1, 'Import Options', IMPORT_OPTIONS, options)
 
         layout.addSpacing(10)
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self._ok_clicked)
         button_box.rejected.connect(self.reject)
-        self.select_none_button = button_box.addButton(' '+_('Clear all')+' ', QDialogButtonBox.ResetRole)
-        self.select_none_button.setToolTip(_('Clear all selections'))
+        self.select_none_button = button_box.addButton(' Clear all ', QDialogButtonBox.ResetRole)
+        self.select_none_button.setToolTip('Clear all selections')
         self.select_none_button.clicked.connect(self._select_none_clicked)
-        self.save_button = button_box.addButton(' '+_('Save')+' ', QDialogButtonBox.ResetRole)
-        self.save_button.setToolTip(_('Save the current selected settings for future recall with the Restore button'))
+        self.save_button = button_box.addButton(' Save ', QDialogButtonBox.ResetRole)
+        self.save_button.setToolTip('Save the current selected settings for future recall with the Restore button')
         self.save_button.clicked.connect(self._save_clicked)
-        self.restore_button = button_box.addButton(' '+_('Restore')+' ', QDialogButtonBox.ResetRole)
-        self.restore_button.setToolTip(_('Restore your settings set when the Save button was last clicked'))
+        self.restore_button = button_box.addButton(' Restore ', QDialogButtonBox.ResetRole)
+        self.restore_button.setToolTip('Restore your settings set when the Save button was last clicked')
         self.restore_button.clicked.connect(self._restore_clicked)
         layout.addWidget(button_box)
 
@@ -150,8 +145,8 @@ class ModifyEpubDialog(SizePersistedDialog):
             if self.options[key]:
                 self.accept()
                 return
-        return error_dialog(self, _('No options selected'),
-                            _('You must select at least one option to continue'),
+        return error_dialog(self, 'No options selected',
+                            'You must select at least one option to continue',
                             show=True, show_copy_button=False)
 
     def _set_options(self):
@@ -177,8 +172,8 @@ class ModifyEpubDialog(SizePersistedDialog):
 class QueueProgressDialog(QProgressDialog):
 
     def __init__(self, gui, book_epubs, tdir, options, queue, db):
-        QProgressDialog.__init__(self, _('Working')+'...', _('Cancel'), 0, len(book_epubs), gui)
-        self.setWindowTitle(_('Queueing books for modifying epubs'))
+        QProgressDialog.__init__(self, 'Working...', 'Cancel', 0, len(book_epubs), gui)
+        self.setWindowTitle('Queueing books for modifying epubs')
         self.setMinimumWidth(500)
         self.book_epubs, self.tdir, self.options, self.queue, self.db = \
             book_epubs, tdir, options, queue, db
@@ -194,7 +189,7 @@ class QueueProgressDialog(QProgressDialog):
 
         try:
             mi, opf_file = create_opf_file(self.db, book_id)
-            self.setLabelText(_('Queueing')+' '+mi.title)
+            self.setLabelText('Queueing '+mi.title)
             cover_file = create_cover_file(self.db, book_id)
             cover_file_name = cover_file.name if cover_file else None
             authors = authors_to_string(self._authors_to_list(self.db, book_id))
@@ -226,8 +221,8 @@ class QueueProgressDialog(QProgressDialog):
                 title = self.db.title(book_id, True)
                 res.append('%s'%title)
             msg = '%s' % '\n'.join(res)
-            warning_dialog(self.gui, _('Could not modify epub for some books'),
-                _('Could not modify %d of %d books, because no epub '
+            warning_dialog(self.gui, 'Could not modify epub for some books',
+                ('Could not modify %d of %d books, because no epub '
                 'source format was found.') % (len(res), len(self.book_epubs)),
                 msg).exec_()
         self.gui = None
@@ -246,8 +241,8 @@ class AddBooksProgressDialog(QProgressDialog):
 
     def __init__(self, gui, modified_epubs, tdir):
         self.total_count = len(modified_epubs)
-        QProgressDialog.__init__(self, _('Working')+'...', _('Cancel'), 0, self.total_count, gui)
-        self.setWindowTitle(_('Adding %d modified epubs')% self.total_count +'...' )
+        QProgressDialog.__init__(self, 'Working...', 'Cancel', 0, self.total_count, gui)
+        self.setWindowTitle('Adding %d modified epubs'% self.total_count +'...' )
         self.setMinimumWidth(500)
         self.modified_epubs, self.tdir = modified_epubs, tdir
         self.book_ids = list(modified_epubs.keys())
@@ -273,7 +268,7 @@ class AddBooksProgressDialog(QProgressDialog):
         self.i += 1
 
         title = self.db.title(book_id, index_is_id=True)
-        self.setLabelText(_('Adding')+': '+title)
+        self.setLabelText('Adding: '+title)
 
         formats = self.db.formats(book_id, index_is_id=True)
         if tweaks['save_original_format_when_polishing'] and 'ORIGINAL_EPUB' not in formats:
@@ -288,6 +283,6 @@ class AddBooksProgressDialog(QProgressDialog):
         self.hide()
         self.db.update_last_modified(self.book_ids)
         remove_dir(self.tdir)
-        self.gui.status_bar.show_message(_('epub files updated'), 3000)
+        self.gui.status_bar.show_message('epub files updated', 3000)
         self.gui = None
         self.db = None

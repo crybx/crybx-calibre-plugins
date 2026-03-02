@@ -9,11 +9,6 @@ try:
 except ImportError:
     from PyQt5.Qt import QUrl, QModelIndex
 
-try:
-    load_translations()
-except NameError:
-    pass # load_translations() added in calibre 1.9
-
 from calibre.gui2 import error_dialog
 from calibre.gui2.actions import InterfaceAction
 from calibre.ptempfile import PersistentTemporaryDirectory, remove_dir
@@ -32,7 +27,7 @@ class ModifyEpubAction(InterfaceAction):
 
     name = 'Epubaholic'
     # Create our top-level menu/toolbar action (text, icon_path, tooltip, keyboard shortcut)
-    action_spec = (_('Epubaholic'), None, _('Modify the contents of an epub without a conversion'), ())
+    action_spec = ('Epubaholic', None, 'Modify the contents of an epub without a conversion', ())
     action_type = 'current'
 
     def genesis(self):
@@ -44,8 +39,8 @@ class ModifyEpubAction(InterfaceAction):
     def modify_epub(self):
         rows = self.gui.library_view.selectionModel().selectedRows()
         if not rows or len(rows) == 0:
-            return error_dialog(self.gui, _('Cannot modify epub'),
-                _('You must select one or more books to perform this action.'), show=True)
+            return error_dialog(self.gui, 'Cannot modify epub',
+                'You must select one or more books to perform this action.', show=True)
 
         book_ids = set(self.gui.library_view.get_selected_ids())
         db = self.gui.library_view.model().db
@@ -55,8 +50,8 @@ class ModifyEpubAction(InterfaceAction):
                 book_epubs.append(book_id)
 
         if not book_epubs:
-            return error_dialog(self.gui, _('Cannot modify epub'),
-                    _('No epub available. First convert the book to epub.'),
+            return error_dialog(self.gui, 'Cannot modify epub',
+                    'No epub available. First convert the book to epub.',
                     show=True)
 
         # Launch dialog asking user to specify what options to modify
@@ -85,16 +80,16 @@ class ModifyEpubAction(InterfaceAction):
 
     def _modify_completed(self, job):
         if job.failed:
-            self.gui.job_exception(job, dialog_title=_('Failed to modify epubs'))
+            self.gui.job_exception(job, dialog_title='Failed to modify epubs')
             return
         modified_epubs_map = job.result
-        self.gui.status_bar.show_message(_('Modify epub completed'), 3000)
+        self.gui.status_bar.show_message('Modify epub completed', 3000)
 
         update_count = len(modified_epubs_map)
         if update_count == 0:
-            msg = _("No epub files were updated. If this isn't what you expected "
+            msg = ("No epub files were updated. If this isn't what you expected "
                     "then press the Show details button to check for errors in the log.")
-            return error_dialog(self.gui, _("Modify epub changed no files"), msg,
+            return error_dialog(self.gui, "Modify epub changed no files", msg,
                                 show_copy_button=True, show=True,
                                 det_msg=job.details)
 
@@ -102,12 +97,12 @@ class ModifyEpubAction(InterfaceAction):
 
         if cfg.plugin_prefs[cfg.STORE_NAME].get(cfg.KEY_ASK_FOR_CONFIRMATION,
                                                 cfg.DEFAULT_STORE_VALUES[cfg.KEY_ASK_FOR_CONFIRMATION]):
-            msg = '<p>'+_('Modify epub modified <b>%d epub files(s)</b> into a temporary location. '
+            msg = '<p>' + ('Modify epub modified <b>%d epub files(s)</b> into a temporary location. '
                    'Proceed with replacing the versions in your library?') % update_count
 
             self.gui.proceed_question(self._proceed_with_updating_epubs,
                 payload, job.details,
-                _('Modify log'), _('Modify epub complete'), msg,
+                'Modify log', 'Modify epub complete', msg,
                 show_copy_button=False,
                 cancel_callback=self._cancel_updating_epubs)
         else:
@@ -116,7 +111,7 @@ class ModifyEpubAction(InterfaceAction):
 
     def _proceed_with_updating_epubs(self, payload):
         modified_epubs_map, tdir = payload
-        
+
         # Check for custom metadata updates and apply them to the database
         custom_metadata_updates = {}
         for book_id, result in modified_epubs_map.items():
@@ -124,10 +119,10 @@ class ModifyEpubAction(InterfaceAction):
                 epub_path, custom_metadata = result
                 if custom_metadata:
                     custom_metadata_updates[book_id] = custom_metadata
-        
+
         if custom_metadata_updates:
             self._update_custom_columns(custom_metadata_updates)
-        
+
         AddBooksProgressDialog(self.gui, modified_epubs_map, tdir)
         self.gui.tags_view.recount()
         if self.gui.current_view() is self.gui.library_view:
@@ -139,11 +134,11 @@ class ModifyEpubAction(InterfaceAction):
         """Update custom columns in Calibre's database"""
         db = self.gui.current_db
         db_ref = db.new_api if hasattr(db, 'new_api') else db
-        
+
         # Group updates by column name
         col_name_books_map = {}
         book_ids_to_update = []
-        
+
         for book_id, custom_metadata in custom_metadata_updates.items():
             if db_ref.has_id(book_id):
                 for col_name, value in custom_metadata.items():
@@ -152,14 +147,14 @@ class ModifyEpubAction(InterfaceAction):
                     col_name_books_map[col_name][book_id] = value
                     if book_id not in book_ids_to_update:
                         book_ids_to_update.append(book_id)
-        
+
         # Apply updates to database
         for col_name, book_values_map in col_name_books_map.items():
             try:
                 db_ref.set_field(col_name, book_values_map)
             except Exception as e:
                 print(f"Failed to update custom column {col_name}: {str(e)}")
-        
+
         # Refresh the UI
         if book_ids_to_update:
             self.gui.library_view.model().refresh_ids(book_ids_to_update)
