@@ -267,7 +267,17 @@ class Container(object):
     def _parse_xml(self, data):
         data = xml_to_unicode(data, strip_encoding_pats=True, assume_utf8=True,
                              resolve_entities=True)[0].strip()
-        return etree.fromstring(data, parser=RECOVER_PARSER)
+        try:
+            return etree.fromstring(data, parser=RECOVER_PARSER)
+        except XMLSyntaxError:
+            # Fallback: parse as UTF-8 bytes with a fresh recovering parser.
+            # This handles cases where the unicode string triggers an lxml
+            # "internal error" due to encoding declaration remnants or
+            # characters that confuse the unicode parsing path.
+            if isinstance(data, str):
+                parser = etree.XMLParser(recover=True, huge_tree=True)
+                return etree.fromstring(data.encode('utf-8'), parser=parser)
+            raise
 
     def _parse_xhtml(self, data, name):
         orig_data = data
