@@ -635,12 +635,40 @@ class BookModifier(object):
         return dirtied
 
 
+    def _remove_nested_div(self, html, open_pattern):
+        """Remove div blocks matching open_pattern, properly handling nested divs."""
+        while True:
+            m = re.search(open_pattern, html)
+            if not m:
+                break
+            # Walk forward from end of opening tag, counting div depth
+            depth = 1
+            pos = m.end()
+            while depth > 0 and pos < len(html):
+                open_m = re.search(r'<div\b', html[pos:])
+                close_m = re.search(r'</div\s*>', html[pos:])
+                if close_m is None:
+                    break
+                if open_m and open_m.start() < close_m.start():
+                    depth += 1
+                    pos += open_m.start() + 1
+                else:
+                    depth -= 1
+                    if depth == 0:
+                        pos += close_m.end()
+                    else:
+                        pos += close_m.end()
+            html = html[:m.start()] + html[pos:]
+        return html
+
     def _lily_junk_cleanup(self, container):
         dirtied = False
         self.log('\tApplying Lily junk cleanup')
         if container.is_drm_encrypted():
             self.log('ERROR - cannot apply Lily junk cleanup to DRM encrypted book')
             return False
+
+        amp_file_numbers = []
 
         for name in container.get_html_names():
             html = container.get_raw(name)
@@ -673,11 +701,37 @@ class BookModifier(object):
             # 7. Collapse double spaces to single space
             html = re.sub(r'  ', ' ', html)
 
+            # 8. Remove div.related-stories-block / div.jp-relatedposts with all nested content
+            html = self._remove_nested_div(html, r'<div\b[^>]*\bclass="(related-stories-block|jp-relatedposts)"[^>]*>')
+
+            # 9. Unwrap <a> tags with lilyonthevalley.com hrefs (keep contents)
+            prev = None
+            while prev != html:
+                prev = html
+                html = re.sub(r'<a\b[^>]*\bhref="[^"]*lilyonthevalley\.com[^"]*"[^>]*>(.*?)</a>', r'\1', html, flags=re.DOTALL)
+
+            # 10. Track files containing &amp;
+            if '&amp;' in html:
+                # Extract number from filename like auto_52_kyU.html
+                basename = name.rsplit('/', 1)[-1] if '/' in name else name
+                num_match = re.search(r'_(\d+)_', basename)
+                if num_match:
+                    amp_file_numbers.append(int(num_match.group(1)))
+
             if html != original_html:
                 dirtied = True
                 html = strip_encoding_declarations(html)
                 container.set(name, html)
                 self.log('\t  Cleaned up junk HTML in:', name)
+
+        # Set #readlocation with file numbers containing &amp;
+        if amp_file_numbers:
+            amp_file_numbers = sorted(set(amp_file_numbers))
+            rpl_value = 'rpl ' + ','.join(str(n) for n in amp_file_numbers)
+            self.log('\t  Files with &amp;: %s' % rpl_value)
+            if not hasattr(self, '_custom_metadata_updates'):
+                self._custom_metadata_updates = {}
+            self._custom_metadata_updates['#readlocation'] = rpl_value
 
         return dirtied
 

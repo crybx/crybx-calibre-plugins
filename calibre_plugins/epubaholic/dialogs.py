@@ -118,8 +118,6 @@ class ModifyEpubDialog(SizePersistedDialog):
         self.restore_button.clicked.connect(self._restore_clicked)
         layout.addWidget(button_box)
 
-        # Reset saved geometry so the dialog resizes to fit new options
-        self.geom = None
         self.resize_dialog()
 
     def _add_groupbox(self, row, col, title, option_info, options):
