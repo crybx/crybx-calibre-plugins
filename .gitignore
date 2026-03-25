@@ -1,2 +1,4 @@
 .idea
 /calibre_plugins/epubaholic/Epubaholic.zip
+
+__pycache__
