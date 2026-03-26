@@ -102,8 +102,8 @@ def readPluginName():
     return zipFileName
 
 if __name__=="__main__":
-    
-    zipFileName = readPluginName()
+
+    zipFileName = os.path.join('..', readPluginName())
 
     adjustCommonImports()
 

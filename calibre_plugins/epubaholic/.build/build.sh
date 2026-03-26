@@ -10,15 +10,15 @@ cd "$PLUGIN_DIR"
 echo "Copying common files for zip"
 cp "$COMMON_DIR"/common_*.py .
 
-# Build the zip
+# Build the zip (output goes to parent dir via build.py)
 python3 "$COMMON_DIR/build.py"
 
 # Clean up common files
 echo "Deleting common files after zip"
 rm -f common_*.py
 
-# Find the most recently modified zip
-PLUGIN_ZIP=$(ls -t *.zip 2>/dev/null | head -1)
+# Find the most recently modified zip in parent dir
+PLUGIN_ZIP=$(ls -t ../*.zip 2>/dev/null | head -1)
 
 if [ -z "$PLUGIN_ZIP" ]; then
     echo "ERROR: No plugin zip file found"
