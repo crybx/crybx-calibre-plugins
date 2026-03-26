@@ -19,7 +19,7 @@ except ImportError:
                           QThread, pyqtSignal, QPixmap, QCheckBox, QPlainTextEdit,
                           QComboBox)
 
-from calibre_plugins.novelupdates.jobs import FetchWorker
+from calibre_plugins.mangaupdates.jobs import FetchWorker
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +83,7 @@ class _CoverFetchWorker(QThread):
                 'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                                'AppleWebKit/537.36 (KHTML, like Gecko) '
                                'Chrome/120.0.0.0 Safari/537.36'),
-                'Referer': 'https://www.novelupdates.com/',
+                'Referer': 'https://www.mangaupdates.com/',
             })
             data = urlopen(req, timeout=15).read()
             self.cover_fetched.emit(data if len(data) > 1024 else None)
@@ -97,14 +97,14 @@ class _CoverFetchWorker(QThread):
 
 class DownloadProgressDialog(QDialog):
 
-    def __init__(self, parent, books_data, cf_cookie, config, db):
+    def __init__(self, parent, books_data, config, db):
         QDialog.__init__(self, parent)
         self.books_data = books_data
         self.config = config
         self.db = db
         self.results = {}
 
-        self.setWindowTitle('Downloading NovelUpdates Metadata')
+        self.setWindowTitle('Downloading MangaUpdates Metadata')
         self.setMinimumWidth(450)
 
         layout = QVBoxLayout(self)
@@ -125,10 +125,9 @@ class DownloadProgressDialog(QDialog):
         self.cancel_btn.clicked.connect(self._cancel)
         btn_layout.addWidget(self.cancel_btn)
 
-        from calibre_plugins.novelupdates.config import KEY_USER_AGENT
+        from calibre_plugins.mangaupdates.config import KEY_USER_AGENT
         user_agent = config.get(KEY_USER_AGENT, '').strip() or None
-        self.worker = FetchWorker(books_data, cf_cookie=cf_cookie,
-                                  user_agent=user_agent, parent=self)
+        self.worker = FetchWorker(books_data, user_agent=user_agent, parent=self)
         self.worker.progress.connect(self._on_progress)
         self.worker.finished.connect(self._on_finished)
         self.worker.start()
@@ -169,13 +168,15 @@ class BookDetailDialog(QDialog):
         self._combos     = {}   # field_name → QComboBox (pick-one fields)
         self._cover_worker = None
 
-        from calibre_plugins.novelupdates.config import (
+        from calibre_plugins.mangaupdates.config import (
             KEY_UPDATE_TITLE, KEY_UPDATE_AUTHORS, KEY_AUTHORS_APPEND,
             KEY_UPDATE_DESCRIPTION, KEY_DESCRIPTION_APPEND,
             KEY_UPDATE_ORIG_LANG, KEY_ORIG_LANG_COL, KEY_UPDATE_COVER,
             KEY_UPDATE_GENRES, KEY_GENRES_COL, KEY_GENRES_APPEND,
-            KEY_UPDATE_TAGS, KEY_TAGS_COL, KEY_TAGS_APPEND,
-            KEY_UPDATE_ASSOC_NAMES, KEY_ASSOC_NAMES_COL, KEY_ASSOC_NAMES_APPEND)
+            KEY_UPDATE_CATEGORIES, KEY_CATEGORIES_COL, KEY_CATEGORIES_APPEND,
+            KEY_UPDATE_ASSOC_NAMES, KEY_ASSOC_NAMES_COL, KEY_ASSOC_NAMES_APPEND,
+            KEY_UPDATE_ARTISTS, KEY_ARTISTS_COL, KEY_ARTISTS_APPEND,
+            KEY_ARTISTS_TO_AUTHORS)
 
         layout = QVBoxLayout(self)
         self.setLayout(layout)
@@ -191,14 +192,14 @@ class BookDetailDialog(QDialog):
         sections_layout.setSpacing(4)
         sections_layout.setContentsMargins(4, 4, 4, 4)
 
-        # Column header row (inside scroll so widths align exactly)
-        _CTR_W = 90  # fixed width of center (apply/append) column
+        # Column header row
+        _CTR_W = 90
         hdr = QWidget()
         hdr.setStyleSheet('background: #e0e0e0;')
         hdr_h = QHBoxLayout(hdr)
         hdr_h.setContentsMargins(0, 3, 0, 3)
         hdr_h.setSpacing(8)
-        _hl = QLabel('<b>From Novel Updates</b>')
+        _hl = QLabel('<b>From Manga Updates</b>')
         _hl.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
         hdr_h.addWidget(_hl, 1)
         _uncheck_btn = QPushButton('Uncheck all')
@@ -215,7 +216,7 @@ class BookDetailDialog(QDialog):
         hdr_h.addWidget(_hr, 1)
         sections_layout.addWidget(hdr)
 
-        # Cover row (first section, same 3-column layout as field rows)
+        # Cover row
         cover_url       = data.get('cover_url')
         cur_cover_bytes = db.cover(book_id, index_is_id=True)
 
@@ -224,7 +225,7 @@ class BookDetailDialog(QDialog):
         cov_row.setSpacing(8)
         cov_row.setContentsMargins(0, 2, 0, 2)
 
-        # Left: new cover (From Novel Updates)
+        # Left: new cover
         cov_left = QWidget()
         cov_left_v = QVBoxLayout(cov_left)
         cov_left_v.setSpacing(2)
@@ -300,7 +301,7 @@ class BookDetailDialog(QDialog):
             current_langs   = ', '.join(calibre_langcode_to_name(l) for l in raw_langs)
         else:
             _a = db.authors(book_id, index_is_id=True) or ''
-            current_authors = _a  # already ' & '-separated
+            current_authors = _a
             _l = db.languages(book_id, index_is_id=True) or ''
             if isinstance(_l, str):
                 current_langs = calibre_langcode_to_name(_l) if _l else ''
@@ -309,8 +310,9 @@ class BookDetailDialog(QDialog):
         current_desc = _strip_html(db.comments(book_id, index_is_id=True) or '')
 
         genres_col      = config.get(KEY_GENRES_COL,      '#extratags').strip()
-        tags_col        = config.get(KEY_TAGS_COL,        '#extratags').strip()
+        categories_col  = config.get(KEY_CATEGORIES_COL,  '#extratags').strip()
         assoc_names_col = config.get(KEY_ASSOC_NAMES_COL, '').strip()
+        artists_col     = config.get(KEY_ARTISTS_COL,     '').strip()
 
         def _col_value(col):
             if not col:
@@ -326,23 +328,18 @@ class BookDetailDialog(QDialog):
                 return ''
 
         current_genres_val      = _col_value(genres_col)
-        current_tags_val        = _col_value(tags_col)
+        current_categories_val  = _col_value(categories_col)
         current_assoc_names_val = _col_value(assoc_names_col)
 
         # Gather new values
         new_title        = data.get('title') or ''
-        new_authors      = ' & '.join(data.get('authors') or [])
         new_desc         = _strip_html(data.get('description') or '')
-        new_genres       = ', '.join(data.get('genres') or [])
-        new_tags         = ', '.join(data.get('tags')   or [])
-        assoc_names_list = data.get('assoc_names') or []
-
-        # Original language — resolve to column value or display name
-        from calibre_plugins.novelupdates.action import _nu_language_to_code
-        from calibre_plugins.novelupdates.common_lang import resolve_lang_for_column as _resolve_lang_for_column
+        # Original language (inferred from type)
+        from calibre_plugins.mangaupdates.action import _mu_type_to_language
+        from calibre_plugins.mangaupdates.common_lang import resolve_lang_for_column as _resolve_lang_for_column
         from calibre.utils.localization import calibre_langcode_to_name
-        nu_lang_str      = data.get('language') or ''
-        lang_code        = _nu_language_to_code(nu_lang_str)
+        mu_type          = data.get('type') or ''
+        lang_code        = _mu_type_to_language(mu_type)
         orig_lang_col    = config.get(KEY_ORIG_LANG_COL, '').strip()
         orig_lang_dest   = orig_lang_col or 'languages'
         if lang_code and orig_lang_col:
@@ -352,12 +349,23 @@ class BookDetailDialog(QDialog):
         else:
             new_orig_lang = ''
         current_orig_lang_val = _col_value(orig_lang_col) if orig_lang_col else current_langs
+        new_genres       = ', '.join(data.get('genres') or [])
+        new_categories   = ', '.join(data.get('categories') or [])
+        assoc_names_list = data.get('assoc_names') or []
+
+        # Authors + Artists: when artistsToAuthors is on, combine them for display
+        artists_to_authors = config.get(KEY_ARTISTS_TO_AUTHORS, True)
+        if artists_to_authors and data.get('artists'):
+            combined = list(data.get('authors') or [])
+            for a in (data.get('artists') or []):
+                if a not in combined:
+                    combined.append(a)
+            new_authors = ' & '.join(combined)
+        else:
+            new_authors = ' & '.join(data.get('authors') or [])
 
         # 9-tuple: (fname, clean_name, dest_label, cur_val, new_val,
         #           cfg_default, append_key, append_def, choices)
-        # clean_name: label above left (NU source) box
-        # dest_label: label above right (library destination) box
-        # choices=None → text cell; choices=list → QComboBox pick-one
         field_defs = [
             ('title', 'Title', 'title',
              current_title, new_title,
@@ -366,6 +374,18 @@ class BookDetailDialog(QDialog):
              current_authors, new_authors,
              config.get(KEY_UPDATE_AUTHORS, True),
              'authors_append', config.get(KEY_AUTHORS_APPEND, False), None),
+        ]
+
+        # Artists row: only show when writing to a separate custom column
+        if not artists_to_authors and artists_col:
+            new_artists = ' & '.join(data.get('artists') or [])
+            field_defs.append(
+                ('artists', 'Artists', artists_col,
+                 _col_value(artists_col), new_artists,
+                 config.get(KEY_UPDATE_ARTISTS, False),
+                 'artists_append', config.get(KEY_ARTISTS_APPEND, False), None))
+
+        field_defs += [
             ('orig_lang', 'Orig. Language', orig_lang_dest,
              current_orig_lang_val, new_orig_lang,
              config.get(KEY_UPDATE_ORIG_LANG, True), None, None, None),
@@ -373,10 +393,10 @@ class BookDetailDialog(QDialog):
              current_genres_val, new_genres,
              bool(genres_col) and config.get(KEY_UPDATE_GENRES, True),
              'genres_append', config.get(KEY_GENRES_APPEND, True), None),
-            ('tags', 'Tags', tags_col or '(not set)',
-             current_tags_val, new_tags,
-             bool(tags_col) and config.get(KEY_UPDATE_TAGS, True),
-             'tags_append', config.get(KEY_TAGS_APPEND, True), None),
+            ('categories', 'Categories', categories_col or '(not set)',
+             current_categories_val, new_categories,
+             bool(categories_col) and config.get(KEY_UPDATE_CATEGORIES, True),
+             'categories_append', config.get(KEY_CATEGORIES_APPEND, True), None),
             ('assoc_names', 'Assoc. Names', assoc_names_col or '(not set)',
              current_assoc_names_val, '',
              bool(assoc_names_col) and config.get(KEY_UPDATE_ASSOC_NAMES, True),
@@ -407,7 +427,7 @@ class BookDetailDialog(QDialog):
             row_h.setSpacing(8)
             row_h.setContentsMargins(0, 2, 0, 2)
 
-            # Left column: NU source value
+            # Left column: MU source value
             left_w = QWidget()
             left_v = QVBoxLayout(left_w)
             left_v.setSpacing(2)
@@ -446,7 +466,7 @@ class BookDetailDialog(QDialog):
 
             row_h.addWidget(left_w, 1)
 
-            # Center column: Overwrite/Append (mutual exclusion) or Apply
+            # Center column: Overwrite/Append or Apply
             center_w = QWidget()
             center_w.setFixedWidth(_CTR_W)
             center_v = QVBoxLayout(center_w)
@@ -512,7 +532,7 @@ class BookDetailDialog(QDialog):
         if can_apply:
             apply_btn = buttons.addButton('Apply', QDialogButtonBox.ButtonRole.AcceptRole)
             apply_btn.setToolTip('Apply these changes to the library and remove from list')
-            _ = apply_btn  # suppress unused warning
+            _ = apply_btn
         close_btn = buttons.addButton('Close', QDialogButtonBox.ButtonRole.RejectRole)
         _ = close_btn
         buttons.accepted.connect(self.accept)
@@ -584,7 +604,7 @@ class ApplyMetadataDialog(QDialog):
         self.db              = db
         self._apply_book_fn  = apply_book_fn
 
-        self.setWindowTitle('Apply NovelUpdates Metadata')
+        self.setWindowTitle('Apply MangaUpdates Metadata')
         self.setMinimumWidth(620)
         self.setMinimumHeight(300)
 
@@ -613,7 +633,7 @@ class ApplyMetadataDialog(QDialog):
             self._book_titles = book_titles
 
             table = QTableWidget(len(found), 4, self)
-            table.setHorizontalHeaderLabels(['Book', 'NU Title', 'Authors', 'Cover'])
+            table.setHorizontalHeaderLabels(['Book', 'MU Title', 'Authors', 'Cover'])
             table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
             table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
             table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)

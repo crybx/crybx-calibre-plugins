@@ -65,6 +65,7 @@ def adjustCommonImports():
     pluginName = os.path.split(os.getcwd())[1]
     # Add to this list if additional common files are added with interdependencies between them
     adjustImportsIfExists('common_dialogs.py', pluginName)
+    adjustImportsIfExists('common_lang.py', pluginName)
     adjustImportsIfExists('common_menus.py', pluginName)
     adjustImportsIfExists('common_widgets.py', pluginName)
 

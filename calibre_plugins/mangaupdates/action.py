@@ -12,28 +12,28 @@ except ImportError:
 from calibre.gui2 import error_dialog, info_dialog
 from calibre.gui2.actions import InterfaceAction
 
-import calibre_plugins.novelupdates.config as cfg
-from calibre_plugins.novelupdates.common_icons import set_plugin_icon_resources, get_icon
-from calibre_plugins.novelupdates.common_menus import create_menu_action_unique
-from calibre_plugins.novelupdates.dialogs import DownloadProgressDialog, ApplyMetadataDialog, BookDetailDialog
+import calibre_plugins.mangaupdates.config as cfg
+from calibre_plugins.mangaupdates.common_icons import set_plugin_icon_resources, get_icon
+from calibre_plugins.mangaupdates.common_menus import create_menu_action_unique
+from calibre_plugins.mangaupdates.dialogs import DownloadProgressDialog, ApplyMetadataDialog, BookDetailDialog
 
-PLUGIN_ICONS = ['images/novelupdates.png']
+PLUGIN_ICONS = ['images/mangaupdates.png']
 
-# Matches any novelupdates.com/series/ URL
-NU_URL_RE = re.compile(r'https?://(?:www\.)?novelupdates\.com/series/[^\s"\'<>\]]+')
+# Matches mangaupdates.com series URLs (new /series/<slug> and old /series.html?id=<num>)
+MU_URL_RE = re.compile(r'https?://(?:www\.)?mangaupdates\.com/series(?:\.html\?id=\d+|/[^\s"\'<>\]]+)')
 
 
-def find_nu_url(book_id, db, config):
+def find_mu_url(book_id, db, config):
     '''
-    Discover a NovelUpdates URL for a book by scanning configured fields.
+    Discover a MangaUpdates URL for a book by scanning configured fields.
     Returns the URL string or None.
     '''
     identifiers = db.get_identifiers(book_id, index_is_id=True)
 
-    # Fast path: already cached as 'novelupdates' identifier
-    nu_cached = identifiers.get('novelupdates', '')
-    if nu_cached:
-        url = nu_cached if nu_cached.startswith('http') else ('https://www.novelupdates.com/series/' + nu_cached)
+    # Fast path: already cached as 'mangaupdates' identifier
+    mu_cached = identifiers.get('mangaupdates', '')
+    if mu_cached:
+        url = mu_cached if mu_cached.startswith('http') else ('https://www.mangaupdates.com/series/' + mu_cached)
         return url.rstrip('/')
 
     # Scan url/uri identifiers
@@ -41,14 +41,14 @@ def find_nu_url(book_id, db, config):
         for key in ('url', 'uri'):
             val = identifiers.get(key, '')
             if val:
-                m = NU_URL_RE.search(val)
+                m = MU_URL_RE.search(val)
                 if m:
                     return m.group(0).rstrip('/')
 
     # Scan comments
     if config.get(cfg.KEY_SCAN_COMMENTS, True):
         comments = db.comments(book_id, index_is_id=True) or ''
-        m = NU_URL_RE.search(comments)
+        m = MU_URL_RE.search(comments)
         if m:
             return m.group(0).rstrip('/')
 
@@ -62,7 +62,7 @@ def find_nu_url(book_id, db, config):
                 else:
                     val = db.get_custom(book_id, label=col_name.lstrip('#'), index_is_id=True)
                 if val:
-                    m = NU_URL_RE.search(str(val))
+                    m = MU_URL_RE.search(str(val))
                     if m:
                         return m.group(0).rstrip('/')
             except Exception:
@@ -71,10 +71,10 @@ def find_nu_url(book_id, db, config):
     return None
 
 
-class NovelUpdatesAction(InterfaceAction):
+class MangaUpdatesAction(InterfaceAction):
 
-    name = 'NovelUpdates'
-    action_spec = ('NovelUpdates', None, 'Download metadata from novelupdates.com', ())
+    name = 'MangaUpdates'
+    action_spec = ('MangaUpdates', None, 'Download metadata from mangaupdates.com', ())
     action_type = 'current'
     popup_type = QToolButton.MenuButtonPopup
 
@@ -87,7 +87,7 @@ class NovelUpdatesAction(InterfaceAction):
         self.menu = QMenu(self.gui)
         self.qaction.setMenu(self.menu)
 
-        create_menu_action_unique(self, self.menu, 'Download NovelUpdates Metadata',
+        create_menu_action_unique(self, self.menu, 'Download MangaUpdates Metadata',
                                   PLUGIN_ICONS[0], triggered=self.download_metadata)
         self.menu.addSeparator()
         create_menu_action_unique(self, self.menu, 'Customize plugin\u2026',
@@ -101,39 +101,34 @@ class NovelUpdatesAction(InterfaceAction):
     def download_metadata(self):
         rows = self.gui.library_view.selectionModel().selectedRows()
         if not rows:
-            return error_dialog(self.gui, 'NovelUpdates',
+            return error_dialog(self.gui, 'MangaUpdates',
                 'Select one or more books first.', show=True)
 
         book_ids = list(self.gui.library_view.get_selected_ids())
         db = self.gui.current_db
         config = cfg.plugin_prefs[cfg.STORE_NAME]
 
-        # Discover NU URLs for each selected book
-        books_data = []   # (book_id, title, nu_url_or_None)
+        # Discover MU URLs for each selected book
+        books_data = []   # (book_id, title, mu_url_or_None)
         for book_id in book_ids:
             title = db.title(book_id, index_is_id=True) or str(book_id)
-            nu_url = find_nu_url(book_id, db, config)
-            books_data.append((book_id, title, nu_url))
+            mu_url = find_mu_url(book_id, db, config)
+            books_data.append((book_id, title, mu_url))
 
         found_count = sum(1 for _, _, url in books_data if url)
         if found_count == 0:
-            return error_dialog(self.gui, 'NovelUpdates',
-                'No NovelUpdates URL found for any of the selected books.\n\n'
+            return error_dialog(self.gui, 'MangaUpdates',
+                'No MangaUpdates URL found for any of the selected books.\n\n'
                 'URLs are discovered from:\n'
-                '  • novelupdates identifier\n'
-                '  • url/uri identifiers (if enabled)\n'
-                '  • Comments field (if enabled)\n'
-                '  • Custom column (default: #links, if enabled)\n\n'
-                'Configure discovery in Preferences → Plugins → NovelUpdates.',
+                '  \u2022 mangaupdates identifier\n'
+                '  \u2022 url/uri identifiers (if enabled)\n'
+                '  \u2022 Comments field (if enabled)\n'
+                '  \u2022 Custom column (default: #links, if enabled)\n\n'
+                'Configure discovery in Preferences \u2192 Plugins \u2192 MangaUpdates.',
                 show=True)
 
-        # Strip 'cf_clearance=' prefix if user accidentally pasted the full cookie string
-        cf_cookie = config.get(cfg.KEY_CF_COOKIE, '').strip()
-        if cf_cookie.lower().startswith('cf_clearance='):
-            cf_cookie = cf_cookie[len('cf_clearance='):]
-
         # Fetch metadata in background
-        dlg = DownloadProgressDialog(self.gui, books_data, cf_cookie, config, db)
+        dlg = DownloadProgressDialog(self.gui, books_data, config, db)
         if dlg.exec_() != dlg.Accepted:
             return
 
@@ -144,22 +139,19 @@ class NovelUpdatesAction(InterfaceAction):
                 r = results.get(book_id, {})
                 for line in r.get('_log', []):
                     log_lines.append('[%s] %s' % (title, line))
-            return error_dialog(self.gui, 'NovelUpdates',
-                'No metadata could be downloaded.\n\n'
-                'If blocked by Cloudflare: make sure the cf_clearance cookie '
-                'value is correct and that your browser\'s User-Agent matches '
-                'what is set in the plugin config.',
+            return error_dialog(self.gui, 'MangaUpdates',
+                'No metadata could be downloaded.',
                 det_msg='\n'.join(log_lines),
                 show=True)
 
         # Show preview and confirm
-        _nu_url_map = {bid: url for bid, _, url in books_data}
+        _mu_url_map = {bid: url for bid, _, url in books_data}
         def _apply_book_fn(book_id):
-            self._apply_one(book_id, _nu_url_map.get(book_id), results[book_id], db, config)
+            self._apply_one(book_id, _mu_url_map.get(book_id), results[book_id], db, config)
 
         # Single book shortcut: skip the list and open the detail dialog directly
         if len(books_data) == 1:
-            book_id, book_title, _nu_url = books_data[0]
+            book_id, book_title, _mu_url = books_data[0]
             data = results.get(book_id)
             if data and not data.get('_failed'):
                 dlg = BookDetailDialog(self.gui, book_id, book_title, data,
@@ -177,7 +169,7 @@ class NovelUpdatesAction(InterfaceAction):
 
         self._apply_metadata(results, books_data, db, config)
 
-    def _apply_one(self, book_id, nu_url, data, db, config):
+    def _apply_one(self, book_id, mu_url, data, db, config):
         '''Write metadata + cover for a single book. Sets data[_already_applied]=True.'''
         db_api = db.new_api if hasattr(db, 'new_api') else db
         overrides = data.get('_apply_fields')
@@ -187,11 +179,11 @@ class NovelUpdatesAction(InterfaceAction):
                 return overrides.get(field_name, False)
             return config.get(config_key, default)
 
-        # Cache the NU URL as an identifier for future fast-path lookups
-        fetched_url = data.get('_url') or nu_url
+        # Cache the MU URL as an identifier for future fast-path lookups
+        fetched_url = data.get('_url') or mu_url
         if fetched_url:
             try:
-                db.set_identifier(book_id, 'novelupdates', fetched_url, index_is_id=True)
+                db.set_identifier(book_id, 'mangaupdates', fetched_url, index_is_id=True)
             except Exception:
                 pass
 
@@ -203,16 +195,24 @@ class NovelUpdatesAction(InterfaceAction):
 
         # Authors
         if _apply(cfg.KEY_UPDATE_AUTHORS, True, 'authors') and data.get('authors'):
+            author_list = list(data['authors'])
+
+            # Merge artists into authors if configured
+            if config.get(cfg.KEY_ARTISTS_TO_AUTHORS, True) and data.get('artists'):
+                for a in data['artists']:
+                    if a not in author_list:
+                        author_list.append(a)
+
             if overrides is not None:
                 auth_append = overrides.get('authors_append', config.get(cfg.KEY_AUTHORS_APPEND, False))
             else:
                 auth_append = config.get(cfg.KEY_AUTHORS_APPEND, False)
             if auth_append:
                 existing = list(db_api.field_for('authors', book_id) or [])
-                merged = existing + [a for a in data['authors'] if a not in existing]
+                merged = existing + [a for a in author_list if a not in existing]
                 fields_to_set['authors'] = merged
             else:
-                fields_to_set['authors'] = data['authors']
+                fields_to_set['authors'] = author_list
 
         # Comments / Description
         if _apply(cfg.KEY_UPDATE_DESCRIPTION, True, 'description') and data.get('description'):
@@ -239,9 +239,9 @@ class NovelUpdatesAction(InterfaceAction):
                     except Exception:
                         pass
 
-        # Original Language — to custom column or Calibre languages field
-        if _apply(cfg.KEY_UPDATE_ORIG_LANG, True, 'orig_lang') and data.get('language'):
-            lang_code = _nu_language_to_code(data['language'])
+        # Original Language (inferred from type) — to custom column or Calibre languages
+        if _apply(cfg.KEY_UPDATE_ORIG_LANG, True, 'orig_lang') and data.get('type'):
+            lang_code = _mu_type_to_language(data['type'])
             if lang_code:
                 orig_lang_col = config.get(cfg.KEY_ORIG_LANG_COL, '').strip()
                 if orig_lang_col:
@@ -250,45 +250,45 @@ class NovelUpdatesAction(InterfaceAction):
                         try:
                             db_api.set_field(orig_lang_col, {book_id: value})
                         except Exception as e:
-                            print('NovelUpdates: failed to set %s: %s' % (orig_lang_col, e))
+                            print('MangaUpdates: failed to set %s: %s' % (orig_lang_col, e))
                 else:
                     try:
                         db_api.set_field('languages', {book_id: [lang_code]})
                     except Exception as e:
-                        print('NovelUpdates: failed to set languages: %s' % e)
+                        print('MangaUpdates: failed to set languages: %s' % e)
 
-        # Genres and Tags — written to separate (or same) configurable columns
-        genres_col = config.get(cfg.KEY_GENRES_COL, '#extratags').strip()
-        tags_col   = config.get(cfg.KEY_TAGS_COL,   '#extratags').strip()
+        # Genres and Categories — written to configurable columns
+        genres_col     = config.get(cfg.KEY_GENRES_COL, '#extratags').strip()
+        categories_col = config.get(cfg.KEY_CATEGORIES_COL, '#extratags').strip()
 
         if overrides is not None:
-            apply_genres = overrides.get('genres', False) and bool(genres_col)
-            apply_tags   = overrides.get('tags',   False) and bool(tags_col)
+            apply_genres     = overrides.get('genres', False) and bool(genres_col)
+            apply_categories = overrides.get('categories', False) and bool(categories_col)
         else:
-            apply_genres = bool(genres_col)
-            apply_tags   = bool(tags_col)
+            apply_genres     = bool(genres_col)
+            apply_categories = bool(categories_col)
 
-        if apply_genres or apply_tags:
-            nu_genres = list(dict.fromkeys(data.get('genres') or []))
-            nu_tags   = list(dict.fromkeys(data.get('tags')   or []))
+        if apply_genres or apply_categories:
+            mu_genres     = list(dict.fromkeys(data.get('genres') or []))
+            mu_categories = list(dict.fromkeys(data.get('categories') or []))
 
             if overrides is not None:
-                genres_append = overrides.get('genres_append', config.get(cfg.KEY_GENRES_APPEND, True))
-                tags_append   = overrides.get('tags_append',   config.get(cfg.KEY_TAGS_APPEND,   True))
+                genres_append     = overrides.get('genres_append', config.get(cfg.KEY_GENRES_APPEND, True))
+                categories_append = overrides.get('categories_append', config.get(cfg.KEY_CATEGORIES_APPEND, True))
             else:
-                genres_append = config.get(cfg.KEY_GENRES_APPEND, True)
-                tags_append   = config.get(cfg.KEY_TAGS_APPEND,   True)
+                genres_append     = config.get(cfg.KEY_GENRES_APPEND, True)
+                categories_append = config.get(cfg.KEY_CATEGORIES_APPEND, True)
 
-            if apply_genres and apply_tags and genres_col == tags_col:
-                combined = list(dict.fromkeys(nu_genres + nu_tags))
+            if apply_genres and apply_categories and genres_col == categories_col:
+                combined = list(dict.fromkeys(mu_genres + mu_categories))
                 _write_tags(db_api, book_id, genres_col, genres_append, combined)
             else:
-                if apply_genres and nu_genres:
-                    _write_tags(db_api, book_id, genres_col, genres_append, nu_genres)
-                if apply_tags and nu_tags:
-                    _write_tags(db_api, book_id, tags_col, tags_append, nu_tags)
+                if apply_genres and mu_genres:
+                    _write_tags(db_api, book_id, genres_col, genres_append, mu_genres)
+                if apply_categories and mu_categories:
+                    _write_tags(db_api, book_id, categories_col, categories_append, mu_categories)
 
-        # Associated Names — requires explicit pick in detail dialog; skip on bulk apply
+        # Associated Names
         assoc_col = config.get(cfg.KEY_ASSOC_NAMES_COL, '').strip()
         if assoc_col and overrides is not None and overrides.get('assoc_names', False):
             selected = overrides.get('assoc_names_value', '').strip()
@@ -298,21 +298,33 @@ class NovelUpdatesAction(InterfaceAction):
                 try:
                     existing = db_api.field_for(assoc_col, book_id)
                     if isinstance(existing, (list, tuple, frozenset)):
-                        # Tags-type column
                         ex_list = list(existing) if existing else []
                         new_val = (ex_list + [selected] if selected not in ex_list
                                    else ex_list) if assoc_append else [selected]
                         db_api.set_field(assoc_col, {book_id: new_val})
                     else:
-                        # Text-type column
                         if assoc_append and existing:
                             db_api.set_field(assoc_col, {book_id: existing + ', ' + selected})
                         else:
                             db_api.set_field(assoc_col, {book_id: selected})
                 except Exception as e:
-                    print('NovelUpdates: failed to set %s: %s' % (assoc_col, e))
+                    print('MangaUpdates: failed to set %s: %s' % (assoc_col, e))
 
-        # Cover — per-book override takes priority over global config
+        # Artists → custom column (separate from authors merge)
+        artists_col = config.get(cfg.KEY_ARTISTS_COL, '').strip()
+        if artists_col and data.get('artists'):
+            if overrides is not None:
+                apply_artists = overrides.get('artists', False)
+            else:
+                apply_artists = config.get(cfg.KEY_UPDATE_ARTISTS, False)
+            if apply_artists:
+                if overrides is not None:
+                    artists_append = overrides.get('artists_append', config.get(cfg.KEY_ARTISTS_APPEND, False))
+                else:
+                    artists_append = config.get(cfg.KEY_ARTISTS_APPEND, False)
+                _write_tags(db_api, book_id, artists_col, artists_append, data['artists'])
+
+        # Cover
         if overrides is not None:
             apply_cover = overrides.get('cover', False)
         else:
@@ -329,14 +341,14 @@ class NovelUpdatesAction(InterfaceAction):
         newly_updated = []
         pre_applied = []
 
-        for book_id, title, nu_url in books_data:
+        for book_id, title, mu_url in books_data:
             data = results.get(book_id)
             if not data or data.get('_failed'):
                 continue
             if data.get('_already_applied'):
                 pre_applied.append(book_id)
                 continue
-            self._apply_one(book_id, nu_url, data, db, config)
+            self._apply_one(book_id, mu_url, data, db, config)
             newly_updated.append(book_id)
 
         all_updated = newly_updated + pre_applied
@@ -349,7 +361,7 @@ class NovelUpdatesAction(InterfaceAction):
                 self.gui.library_view.model().current_changed(current, QModelIndex())
             self.gui.tags_view.recount()
 
-        info_dialog(self.gui, 'NovelUpdates',
+        info_dialog(self.gui, 'MangaUpdates',
             'Updated metadata for %d book(s).' % len(all_updated),
             show=True)
 
@@ -364,7 +376,7 @@ class NovelUpdatesAction(InterfaceAction):
             'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                            'AppleWebKit/537.36 (KHTML, like Gecko) '
                            'Chrome/120.0.0.0 Safari/537.36'),
-            'Referer': 'https://www.novelupdates.com/',
+            'Referer': 'https://www.mangaupdates.com/',
         }
 
         try:
@@ -376,7 +388,7 @@ class NovelUpdatesAction(InterfaceAction):
                 except Exception:
                     db.set_cover(book_id, cover_data, index_is_id=True)
         except Exception as e:
-            print('NovelUpdates: cover download failed for book %s: %s' % (book_id, e))
+            print('MangaUpdates: cover download failed for book %s: %s' % (book_id, e))
 
 
 # --- Helpers ---
@@ -395,30 +407,23 @@ def _write_tags(db_api, book_id, col, append, new_values):
             new_values = existing + [t for t in new_values if t not in existing]
         db_api.set_field(col, {book_id: new_values})
     except Exception as e:
-        print('NovelUpdates: failed to set %s: %s' % (col, e))
+        print('MangaUpdates: failed to set %s: %s' % (col, e))
 
-_NU_LANG_MAP = {
-    'chinese': 'zho',
-    'japanese': 'jpn',
-    'korean': 'kor',
-    'english': 'eng',
-    'french': 'fra',
-    'german': 'deu',
-    'spanish': 'spa',
-    'vietnamese': 'vie',
-    'thai': 'tha',
-    'indonesian': 'ind',
-    'tagalog': 'tgl',
-    'russian': 'rus',
+_MU_TYPE_TO_LANG = {
+    'manga': 'jpn',
+    'manhwa': 'kor',
+    'manhua': 'zho',
+    'doujinshi': 'jpn',
+    'oel': 'eng',
 }
 
-def _nu_language_to_code(lang_str):
-    '''Map a NU language name to a Calibre language code.'''
-    if not lang_str:
+def _mu_type_to_language(type_str):
+    '''Infer a Calibre language code from MU series type.'''
+    if not type_str:
         return None
-    return _NU_LANG_MAP.get(lang_str.lower().strip())
+    return _MU_TYPE_TO_LANG.get(type_str.lower().strip())
 
-from calibre_plugins.novelupdates.common_lang import resolve_lang_for_column as _resolve_lang_for_column
+from calibre_plugins.mangaupdates.common_lang import resolve_lang_for_column as _resolve_lang_for_column
 
 
 def _dict_to_partial_metadata(fields):
