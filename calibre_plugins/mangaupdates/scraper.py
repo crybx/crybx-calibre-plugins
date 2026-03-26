@@ -81,21 +81,14 @@ def _inner_html(element):
     return ''.join(parts).strip()
 
 
-def fetch_mu_metadata(url, user_agent=None, log=None):
-    """
-    Fetch and parse a mangaupdates.com series page.
-
-    Returns a dict with the parsed fields, or None on failure.
-    Keys: title, authors, artists, description, genres, categories,
-          cover_url, type, status, year, original_publisher,
-          english_publisher, assoc_names, licensed.
-    """
+def _fetch_page(url, user_agent=None, log=None):
+    """Fetch a URL and return the parsed lxml root, or None on failure."""
     def _log(msg):
         if log:
             log(msg)
 
     if not HAS_LXML:
-        _log('ERROR: lxml is not available — cannot parse MangaUpdates page')
+        _log('ERROR: lxml is not available')
         return None
 
     _log('Fetching: ' + url)
@@ -113,7 +106,6 @@ def fetch_mu_metadata(url, user_agent=None, log=None):
         response = urlopen(req, timeout=30)
         raw = response.read()
 
-        # Handle compression regardless of what we requested
         content_encoding = response.info().get('Content-Encoding', '')
         if content_encoding == 'gzip' or (raw[:2] == b'\x1f\x8b'):
             import gzip, io
@@ -128,8 +120,7 @@ def fetch_mu_metadata(url, user_agent=None, log=None):
             except Exception as e:
                 _log('  brotli decompress failed (brotli not installed?): ' + str(e))
 
-        _log('  response: %d bytes, encoding=%r, first 200 chars: %r' % (
-            len(raw), content_encoding, raw[:200]))
+        _log('  response: %d bytes' % len(raw))
 
     except HTTPError as e:
         _log('HTTP error %d fetching %s' % (e.code, url))
@@ -142,9 +133,81 @@ def fetch_mu_metadata(url, user_agent=None, log=None):
         return None
 
     try:
-        root = lxml_html.fromstring(raw)
+        return lxml_html.fromstring(raw)
     except Exception as e:
         _log('Failed to parse HTML: ' + str(e))
+        return None
+
+
+def search_mu_series(query, user_agent=None, log=None):
+    """
+    Search MangaUpdates for series matching the query.
+
+    Returns a list of dicts: [{title, url, genres, year, rating}, ...]
+    """
+    try:
+        from urllib.parse import quote_plus
+    except ImportError:
+        from urllib import quote_plus
+
+    url = 'https://www.mangaupdates.com/site/search/result?search=' + quote_plus(query)
+    root = _fetch_page(url, user_agent=user_agent, log=log)
+    if root is None:
+        return []
+
+    results = []
+    # Only match series rows (exclude release-list rows which also have these links)
+    for link in root.xpath(
+            './/div[contains(@class,"series-list-module")]'
+            '//a[@title="Click for Series Info"]'):
+        title = link.text_content().strip()
+        href = link.get('href', '')
+        if not title or not href:
+            continue
+
+        # Navigate: link → col-6 div → inner row div → sibling columns
+        col_div = link.getparent()
+        row_div = col_div.getparent()
+        cols = row_div.xpath('./div')
+
+        genres = ''
+        year = ''
+        rating = ''
+        if len(cols) >= 2:
+            genre_a = cols[1].xpath('.//a')
+            if genre_a:
+                genres = genre_a[0].get('title', '') or genre_a[0].text_content().strip()
+        if len(cols) >= 3:
+            year = cols[2].text_content().strip()
+        if len(cols) >= 4:
+            rating = cols[3].text_content().strip()
+
+        results.append({
+            'title': title,
+            'url': href,
+            'genres': genres,
+            'year': year,
+            'rating': rating,
+        })
+
+    return results
+
+
+def fetch_mu_metadata(url, user_agent=None, log=None):
+    """
+    Fetch and parse a mangaupdates.com series page.
+
+    Returns a dict with the parsed fields, or None on failure.
+    Keys: title, authors, artists, description, genres, categories,
+          cover_url, type, status, year, original_publisher,
+          english_publisher, assoc_names, licensed.
+    """
+    def _log(msg):
+        if log:
+            log(msg)
+
+    root = _fetch_page(url, user_agent=user_agent, log=log)
+    if root is None:
         return None
 
     result = {}

@@ -10,7 +10,7 @@ try:
                          QTableWidgetItem, QAbstractItemView, QHeaderView,
                          QDialogButtonBox, QScrollArea, QWidget,
                          QThread, pyqtSignal, QPixmap, QCheckBox, QPlainTextEdit,
-                         QComboBox)
+                         QComboBox, QLineEdit)
 except ImportError:
     from PyQt5.Qt import (Qt, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                           QPushButton, QProgressBar, QTableWidget,
@@ -685,3 +685,625 @@ class ApplyMetadataDialog(QDialog):
             self._found.pop(row)
             if not self._found:
                 self.accept()
+
+
+# ---------------------------------------------------------------------------
+# Search worker (background thread for MU search)
+# ---------------------------------------------------------------------------
+
+class _SearchWorker(QThread):
+    finished = pyqtSignal(list)
+    error = pyqtSignal(str)
+
+    def __init__(self, query, user_agent=None, parent=None):
+        QThread.__init__(self, parent)
+        self.query = query
+        self.user_agent = user_agent
+
+    def run(self):
+        from calibre_plugins.mangaupdates.scraper import search_mu_series
+        try:
+            results = search_mu_series(self.query, user_agent=self.user_agent)
+            self.finished.emit(results or [])
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+# ---------------------------------------------------------------------------
+# Search & Link dialog
+# ---------------------------------------------------------------------------
+
+class SearchLinkDialog(QDialog):
+    '''
+    Search MangaUpdates and link a series to each selected book.
+    Processes books one at a time; user picks the matching series from results.
+    '''
+
+    linked = []  # list of book_ids that were linked (set after dialog closes)
+
+    def __init__(self, parent, books_data, config, db):
+        '''books_data: list of (book_id, title)'''
+        QDialog.__init__(self, parent)
+        self._books = list(books_data)
+        self._config = config
+        self._db = db
+        self._current_idx = 0
+        self.linked = []
+        self._worker = None
+        self._results = []
+
+        self.setWindowTitle('Link to MangaUpdates')
+        self.setMinimumSize(750, 500)
+
+        layout = QVBoxLayout(self)
+        self.setLayout(layout)
+
+        # Book label
+        self._book_label = QLabel(self)
+        self._book_label.setWordWrap(True)
+        layout.addWidget(self._book_label)
+
+        # Search row
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(QLabel('Search:', self))
+        self._search_edit = QLineEdit(self)
+        self._search_edit.returnPressed.connect(self._do_search)
+        search_layout.addWidget(self._search_edit)
+        self._search_btn = QPushButton('Search', self)
+        self._search_btn.clicked.connect(self._do_search)
+        search_layout.addWidget(self._search_btn)
+        layout.addLayout(search_layout)
+
+        # Results table
+        self._table = QTableWidget(0, 4, self)
+        self._table.setHorizontalHeaderLabels(['Title', 'Genre', 'Year', 'Rating'])
+        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        hh = self._table.horizontalHeader()
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self._table.verticalHeader().setVisible(False)
+        self._table.setWordWrap(True)
+        self._table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self._table.itemSelectionChanged.connect(self._on_selection)
+        layout.addWidget(self._table)
+
+        # Status
+        self._status = QLabel('', self)
+        self._status.setStyleSheet('color: #555;')
+        layout.addWidget(self._status)
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        if len(self._books) > 1:
+            self._skip_btn = QPushButton('Skip', self)
+            self._skip_btn.clicked.connect(self._skip)
+            btn_layout.addWidget(self._skip_btn)
+        self._link_btn = QPushButton('Link', self)
+        self._link_btn.setEnabled(False)
+        self._link_btn.clicked.connect(self._link)
+        btn_layout.addWidget(self._link_btn)
+        close_btn = QPushButton('Close', self)
+        close_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(close_btn)
+        layout.addLayout(btn_layout)
+
+        self._load_book(0)
+
+    def _load_book(self, idx):
+        if idx >= len(self._books):
+            self.accept()
+            return
+        self._current_idx = idx
+        book_id, title = self._books[idx]
+        if len(self._books) > 1:
+            self._book_label.setText(
+                '<b>Book %d of %d:</b> %s' % (idx + 1, len(self._books), title))
+        else:
+            self._book_label.setText('<b>%s</b>' % title)
+        self._search_edit.setText(title)
+        self._table.setRowCount(0)
+        self._results = []
+        self._link_btn.setEnabled(False)
+        self._status.setText('')
+        # Auto-search on load
+        self._do_search()
+
+    def _do_search(self):
+        query = self._search_edit.text().strip()
+        if not query:
+            return
+        self._status.setText('Searching\u2026')
+        self._search_btn.setEnabled(False)
+        self._link_btn.setEnabled(False)
+        self._table.setRowCount(0)
+
+        # Clean up previous worker
+        if self._worker is not None:
+            try:
+                self._worker.finished.disconnect()
+                self._worker.error.disconnect()
+            except Exception:
+                pass
+
+        from calibre_plugins.mangaupdates.config import KEY_USER_AGENT
+        ua = self._config.get(KEY_USER_AGENT, '').strip() or None
+        self._worker = _SearchWorker(query, user_agent=ua, parent=self)
+        self._worker.finished.connect(self._on_results)
+        self._worker.error.connect(self._on_error)
+        self._worker.start()
+
+    def _on_results(self, results):
+        self._search_btn.setEnabled(True)
+        self._results = results
+        self._table.setRowCount(len(results))
+        for row, r in enumerate(results):
+            self._table.setItem(row, 0, QTableWidgetItem(r.get('title', '')))
+            self._table.setItem(row, 1, QTableWidgetItem(r.get('genres', '')))
+            self._table.setItem(row, 2, QTableWidgetItem(r.get('year', '')))
+            self._table.setItem(row, 3, QTableWidgetItem(r.get('rating', '')))
+        self._status.setText('%d series found.' % len(results) if results
+                             else 'No series found.')
+
+    def _on_error(self, msg):
+        self._search_btn.setEnabled(True)
+        self._status.setText('Error: ' + msg)
+
+    def _on_selection(self):
+        rows = self._table.selectionModel().selectedRows()
+        self._link_btn.setEnabled(bool(rows))
+
+    def _selected_result(self):
+        rows = self._table.selectionModel().selectedRows()
+        if not rows:
+            return None
+        return self._results[rows[0].row()]
+
+    def _link(self):
+        result = self._selected_result()
+        if not result:
+            return
+        book_id = self._books[self._current_idx][0]
+        self._write_link(book_id, result['url'])
+        self.linked.append(book_id)
+        self._load_book(self._current_idx + 1)
+
+    def _skip(self):
+        self._load_book(self._current_idx + 1)
+
+    def _write_link(self, book_id, mu_url):
+        db = self._db
+        db_api = db.new_api if hasattr(db, 'new_api') else db
+
+        # Cache as identifier for fast-path lookups
+        try:
+            db.set_identifier(book_id, 'mangaupdates', mu_url, index_is_id=True)
+        except Exception:
+            pass
+
+        from calibre_plugins.mangaupdates.config import KEY_LINK_COL
+        link_col = self._config.get(KEY_LINK_COL, '#links').strip()
+        if not link_col:
+            return
+
+        md_link = '[MangaUpdates](%s)' % mu_url
+        try:
+            existing = db_api.field_for(link_col, book_id)
+            if existing:
+                if isinstance(existing, (list, tuple)):
+                    existing = ', '.join(str(v) for v in existing)
+                existing = str(existing)
+                # Replace existing MU link if present, otherwise append
+                mu_link_re = re.compile(
+                    r'\[MangaUpdates\]\([^)]*mangaupdates\.com[^)]*\)', re.IGNORECASE)
+                if mu_link_re.search(existing):
+                    new_val = mu_link_re.sub(md_link, existing)
+                else:
+                    new_val = existing + ', \n' + md_link
+            else:
+                new_val = md_link
+            db_api.set_field(link_col, {book_id: new_val})
+        except Exception as e:
+            print('MangaUpdates: failed to write link to %s: %s' % (link_col, e))
+
+
+# ---------------------------------------------------------------------------
+# Metadata fetch worker (single series page)
+# ---------------------------------------------------------------------------
+
+class _MetadataFetchWorker(QThread):
+    finished = pyqtSignal(dict)
+
+    def __init__(self, url, user_agent=None, parent=None):
+        QThread.__init__(self, parent)
+        self.url = url
+        self.user_agent = user_agent
+
+    def run(self):
+        from calibre_plugins.mangaupdates.scraper import fetch_mu_metadata
+        try:
+            data = fetch_mu_metadata(self.url, user_agent=self.user_agent)
+            if data:
+                data['_url'] = self.url
+                self.finished.emit(data)
+            else:
+                self.finished.emit({'_failed': True})
+        except Exception:
+            self.finished.emit({'_failed': True})
+
+
+# ---------------------------------------------------------------------------
+# Add from MangaUpdates dialog
+# ---------------------------------------------------------------------------
+
+class SeriesPreviewDialog(QDialog):
+    '''
+    Preview metadata from a MangaUpdates series page with per-field
+    checkboxes.  All fields default to checked.  On accept the chosen
+    fields are written into data['_apply_fields'] so _apply_one respects them.
+    '''
+
+    def __init__(self, parent, data, config):
+        QDialog.__init__(self, parent)
+        self.setWindowTitle('Preview: ' + (data.get('title') or ''))
+        self.setMinimumSize(700, 550)
+        self._data = data
+        self._cover_worker = None
+        self._checkboxes = {}  # field_name -> QCheckBox
+
+        from calibre_plugins.mangaupdates.config import (
+            KEY_GENRES_COL, KEY_CATEGORIES_COL, KEY_ARTISTS_COL,
+            KEY_ARTISTS_TO_AUTHORS, KEY_ORIG_LANG_COL)
+        from calibre_plugins.mangaupdates.action import _mu_type_to_language
+        from calibre.utils.localization import calibre_langcode_to_name
+
+        layout = QVBoxLayout(self)
+        self.setLayout(layout)
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        body = QVBoxLayout(container)
+        body.setSpacing(6)
+
+        # --- Cover + title header ---
+        header = QHBoxLayout()
+        header.setSpacing(12)
+
+        self._cover_img = _cover_label('Loading\u2026' if data.get('cover_url') else '(no cover)')
+        header.addWidget(self._cover_img, 0, Qt.AlignmentFlag.AlignTop)
+
+        # Right: title, type/year/status, also-known-as, cover checkbox
+        title_info = QVBoxLayout()
+        title_info.setSpacing(2)
+        title_info.addWidget(QLabel('<h3>%s</h3>' % (data.get('title') or '')))
+        info_parts = []
+        if data.get('type'):
+            info_parts.append('<b>Type:</b> ' + data['type'])
+        if data.get('year'):
+            info_parts.append('<b>Year:</b> ' + data['year'])
+        if data.get('status'):
+            info_parts.append('<b>Status:</b> ' + data['status'])
+        if info_parts:
+            lbl = QLabel('  |  '.join(info_parts))
+            lbl.setWordWrap(True)
+            title_info.addWidget(lbl)
+        if data.get('assoc_names'):
+            lbl = QLabel('<i>Also known as: ' + ', '.join(data['assoc_names']) + '</i>')
+            lbl.setWordWrap(True)
+            lbl.setStyleSheet('color: #666;')
+            title_info.addWidget(lbl)
+        if data.get('cover_url'):
+            cb = QCheckBox('Include Cover', container)
+            cb.setChecked(True)
+            cb.setStyleSheet('font-weight: bold;')
+            self._checkboxes['cover'] = cb
+            title_info.addWidget(cb)
+        title_info.addStretch()
+        header.addLayout(title_info, 1)
+        body.addLayout(header)
+
+        body.addSpacing(4)
+
+        # --- Per-field sections: checkbox label above, value below ---
+        def _add_field(field_name, label, value, default_on=True):
+            if not value:
+                return
+            cb = QCheckBox(label, container)
+            cb.setChecked(default_on)
+            cb.setStyleSheet('font-weight: bold;')
+            self._checkboxes[field_name] = cb
+            body.addWidget(cb)
+            val_w = QPlainTextEdit(value)
+            val_w.setReadOnly(True)
+            line_h = val_w.fontMetrics().lineSpacing()
+            lines = value.count('\n') + max(1, len(value) // 60)
+            val_w.setFixedHeight(min(lines, 4) * line_h + 12)
+            val_w.setStyleSheet('background: #fafafa; border: 1px solid #ddd;')
+            body.addWidget(val_w)
+
+        _add_field('authors', 'Authors',
+                   ', '.join(data.get('authors') or []))
+
+        artists_to_authors = config.get(KEY_ARTISTS_TO_AUTHORS, True)
+        artists_col = config.get(KEY_ARTISTS_COL, '').strip()
+        if data.get('artists') and (artists_to_authors or artists_col):
+            dest = '\u2192 authors' if artists_to_authors else ('\u2192 ' + artists_col)
+            _add_field('artists', 'Artists (%s)' % dest,
+                       ', '.join(data['artists']))
+
+        lang_code = _mu_type_to_language(data.get('type') or '')
+        if lang_code:
+            lang_display = calibre_langcode_to_name(lang_code)
+            _add_field('orig_lang', 'Orig. Language', lang_display)
+
+        _add_field('genres', 'Genres',
+                   ', '.join(data.get('genres') or []))
+        _add_field('categories', 'Categories',
+                   ', '.join(data.get('categories') or []))
+
+        # Assoc. Names — pick one from a combo box, like the detail dialog
+        from calibre_plugins.mangaupdates.config import KEY_ASSOC_NAMES_COL
+        assoc_col = config.get(KEY_ASSOC_NAMES_COL, '').strip()
+        assoc_names_list = data.get('assoc_names') or []
+        if assoc_names_list and assoc_col:
+            cb = QCheckBox('Assoc. Name \u2192 %s' % assoc_col, container)
+            cb.setChecked(True)
+            cb.setStyleSheet('font-weight: bold;')
+            self._checkboxes['assoc_names'] = cb
+            body.addWidget(cb)
+            self._assoc_combo = QComboBox(container)
+            for name in assoc_names_list:
+                self._assoc_combo.addItem(name)
+            body.addWidget(self._assoc_combo)
+        else:
+            self._assoc_combo = None
+
+        desc_html = data.get('description') or ''
+        if desc_html:
+            desc_text = _strip_html(desc_html)
+            cb = QCheckBox('Description', container)
+            cb.setChecked(True)
+            cb.setStyleSheet('font-weight: bold;')
+            self._checkboxes['description'] = cb
+            body.addWidget(cb)
+            desc_edit = QPlainTextEdit(desc_text)
+            desc_edit.setReadOnly(True)
+            desc_edit.setMinimumHeight(120)
+            desc_edit.setStyleSheet('background: #fafafa; border: 1px solid #ddd;')
+            body.addWidget(desc_edit, 1)
+
+        body.addStretch()
+        scroll.setWidget(container)
+        layout.addWidget(scroll)
+
+        # Buttons
+        buttons = QDialogButtonBox(self)
+        buttons.addButton('Add to Library', QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.addButton('Close', QDialogButtonBox.ButtonRole.RejectRole)
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        # Fetch cover
+        if data.get('cover_url'):
+            self._cover_worker = _CoverFetchWorker(data['cover_url'], self)
+            self._cover_worker.cover_fetched.connect(self._on_cover)
+            self._cover_worker.start()
+
+    def _on_cover(self, img_data):
+        pm = _pixmap_from_bytes(img_data)
+        if pm:
+            self._cover_img.setPixmap(_scale_pixmap(pm))
+            self._cover_img.setText('')
+        else:
+            self._cover_img.setText('(failed)')
+
+    def _on_accept(self):
+        # Write checkbox state into data so _apply_one reads it
+        fields = {}
+        for fname, cb in self._checkboxes.items():
+            fields[fname] = cb.isChecked()
+        if self._assoc_combo is not None:
+            fields['assoc_names_value'] = self._assoc_combo.currentText()
+        self._data['_apply_fields'] = fields
+        self.accept()
+
+
+class AddFromMUDialog(QDialog):
+    '''
+    Search MangaUpdates, preview a series, and create a new empty book
+    with full metadata from the series page.
+    Double-click a result to preview before adding.
+    '''
+
+    added = []  # book_ids of created books
+
+    def __init__(self, parent, config, db, apply_fn=None):
+        QDialog.__init__(self, parent)
+        self._config = config
+        self._db = db
+        self._apply_fn = apply_fn
+        self.added = []
+        self._search_worker = None
+        self._fetch_worker = None
+        self._results = []
+
+        self.setWindowTitle('Add from MangaUpdates')
+        self.setMinimumSize(750, 500)
+
+        layout = QVBoxLayout(self)
+        self.setLayout(layout)
+
+        hint = QLabel('Double-click a result to preview, then add to library.', self)
+        hint.setStyleSheet('color: #555; font-style: italic;')
+        layout.addWidget(hint)
+
+        # Search row
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(QLabel('Search:', self))
+        self._search_edit = QLineEdit(self)
+        self._search_edit.returnPressed.connect(self._do_search)
+        search_layout.addWidget(self._search_edit)
+        self._search_btn = QPushButton('Search', self)
+        self._search_btn.clicked.connect(self._do_search)
+        search_layout.addWidget(self._search_btn)
+        layout.addLayout(search_layout)
+
+        # Results table
+        self._table = QTableWidget(0, 4, self)
+        self._table.setHorizontalHeaderLabels(['Title', 'Genre', 'Year', 'Rating'])
+        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        hh = self._table.horizontalHeader()
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self._table.verticalHeader().setVisible(False)
+        self._table.setWordWrap(True)
+        self._table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self._table.cellDoubleClicked.connect(self._on_double_click)
+        layout.addWidget(self._table)
+
+        # Status
+        self._status = QLabel('', self)
+        self._status.setStyleSheet('color: #555;')
+        self._status.setWordWrap(True)
+        layout.addWidget(self._status)
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        close_btn = QPushButton('Close', self)
+        close_btn.clicked.connect(self.accept)
+        btn_layout.addWidget(close_btn)
+        layout.addLayout(btn_layout)
+
+        self._search_edit.setFocus()
+
+    def _do_search(self):
+        query = self._search_edit.text().strip()
+        if not query:
+            return
+        self._status.setText('Searching\u2026')
+        self._search_btn.setEnabled(False)
+        self._table.setRowCount(0)
+
+        if self._search_worker is not None:
+            try:
+                self._search_worker.finished.disconnect()
+                self._search_worker.error.disconnect()
+            except Exception:
+                pass
+
+        from calibre_plugins.mangaupdates.config import KEY_USER_AGENT
+        ua = self._config.get(KEY_USER_AGENT, '').strip() or None
+        self._search_worker = _SearchWorker(query, user_agent=ua, parent=self)
+        self._search_worker.finished.connect(self._on_results)
+        self._search_worker.error.connect(self._on_search_error)
+        self._search_worker.start()
+
+    def _on_results(self, results):
+        self._search_btn.setEnabled(True)
+        self._results = results
+        self._table.setRowCount(len(results))
+        for row, r in enumerate(results):
+            self._table.setItem(row, 0, QTableWidgetItem(r.get('title', '')))
+            self._table.setItem(row, 1, QTableWidgetItem(r.get('genres', '')))
+            self._table.setItem(row, 2, QTableWidgetItem(r.get('year', '')))
+            self._table.setItem(row, 3, QTableWidgetItem(r.get('rating', '')))
+        self._status.setText('%d series found.' % len(results) if results
+                             else 'No series found.')
+
+    def _on_search_error(self, msg):
+        self._search_btn.setEnabled(True)
+        self._status.setText('Error: ' + msg)
+
+    def _on_double_click(self, row, _col):
+        if row < 0 or row >= len(self._results):
+            return
+        result = self._results[row]
+        self._status.setText('Fetching metadata\u2026')
+        self._search_btn.setEnabled(False)
+
+        if self._fetch_worker is not None:
+            try:
+                self._fetch_worker.finished.disconnect()
+            except Exception:
+                pass
+
+        from calibre_plugins.mangaupdates.config import KEY_USER_AGENT
+        ua = self._config.get(KEY_USER_AGENT, '').strip() or None
+        self._fetch_worker = _MetadataFetchWorker(result['url'],
+                                                   user_agent=ua, parent=self)
+        self._fetch_worker.finished.connect(self._on_metadata)
+        self._fetch_worker.start()
+
+    def _on_metadata(self, data):
+        self._search_btn.setEnabled(True)
+
+        if data.get('_failed'):
+            self._status.setText('Failed to fetch metadata.')
+            return
+
+        self._status.setText('')
+
+        # Show preview dialog — user decides whether to add and which fields
+        preview = SeriesPreviewDialog(self, data, self._config)
+        if preview.exec_() != preview.Accepted:
+            return
+
+        self._create_book(data)
+
+    def _create_book(self, data):
+        mu_url = data.get('_url', '')
+        title = data.get('title') or 'Unknown'
+        authors = data.get('authors') or ['Unknown']
+
+        from calibre.ebooks.metadata.book.base import Metadata
+        mi = Metadata(title, authors)
+        db = self._db
+
+        try:
+            book_id = db.import_book(mi, [])
+        except Exception as e:
+            self._status.setText('Failed to create book: %s' % e)
+            return
+
+        # _apply_fields was set by SeriesPreviewDialog checkboxes;
+        # pass config with all booleans on so only _apply_fields controls what's written
+        if self._apply_fn:
+            from calibre_plugins.mangaupdates.config import DEFAULT_STORE_VALUES
+            add_config = dict(self._config)
+            add_config.update({k: True for k, v in DEFAULT_STORE_VALUES.items()
+                               if isinstance(v, bool)})
+            for k in DEFAULT_STORE_VALUES:
+                if k.lower().endswith('append'):
+                    add_config[k] = False
+            self._apply_fn(book_id, mu_url, data, db, add_config)
+
+        # Write the markdown link
+        from calibre_plugins.mangaupdates.config import KEY_LINK_COL
+        link_col = self._config.get(KEY_LINK_COL, '#links').strip()
+        if link_col:
+            md_link = '[MangaUpdates](%s)' % mu_url
+            try:
+                db_api = db.new_api if hasattr(db, 'new_api') else db
+                db_api.set_field(link_col, {book_id: md_link})
+            except Exception:
+                pass
+
+        # Set the mangaupdates identifier
+        try:
+            db.set_identifier(book_id, 'mangaupdates', mu_url, index_is_id=True)
+        except Exception:
+            pass
+
+        self.added.append(book_id)
+        self._status.setText('Added: %s' % title)

@@ -15,7 +15,9 @@ from calibre.gui2.actions import InterfaceAction
 import calibre_plugins.mangaupdates.config as cfg
 from calibre_plugins.mangaupdates.common_icons import set_plugin_icon_resources, get_icon
 from calibre_plugins.mangaupdates.common_menus import create_menu_action_unique
-from calibre_plugins.mangaupdates.dialogs import DownloadProgressDialog, ApplyMetadataDialog, BookDetailDialog
+from calibre_plugins.mangaupdates.dialogs import (DownloadProgressDialog, ApplyMetadataDialog,
+                                                   BookDetailDialog, SearchLinkDialog,
+                                                   AddFromMUDialog)
 
 PLUGIN_ICONS = ['images/mangaupdates.png']
 
@@ -89,6 +91,10 @@ class MangaUpdatesAction(InterfaceAction):
 
         create_menu_action_unique(self, self.menu, 'Download MangaUpdates Metadata',
                                   PLUGIN_ICONS[0], triggered=self.download_metadata)
+        create_menu_action_unique(self, self.menu, 'Link to MangaUpdates\u2026',
+                                  PLUGIN_ICONS[0], triggered=self.link_to_mu)
+        create_menu_action_unique(self, self.menu, 'Add from MangaUpdates\u2026',
+                                  PLUGIN_ICONS[0], triggered=self.add_from_mu)
         self.menu.addSeparator()
         create_menu_action_unique(self, self.menu, 'Customize plugin\u2026',
                                   'config.png', shortcut=False,
@@ -97,6 +103,48 @@ class MangaUpdatesAction(InterfaceAction):
 
     def show_configuration(self):
         self.interface_action_base_plugin.do_user_config(self.gui)
+
+    def link_to_mu(self):
+        rows = self.gui.library_view.selectionModel().selectedRows()
+        if not rows:
+            return error_dialog(self.gui, 'MangaUpdates',
+                'Select one or more books first.', show=True)
+
+        book_ids = list(self.gui.library_view.get_selected_ids())
+        db = self.gui.current_db
+        config = cfg.plugin_prefs[cfg.STORE_NAME]
+
+        books_data = []
+        for book_id in book_ids:
+            title = db.title(book_id, index_is_id=True) or str(book_id)
+            books_data.append((book_id, title))
+
+        dlg = SearchLinkDialog(self.gui, books_data, config, db)
+        dlg.exec_()
+
+        if dlg.linked:
+            self.gui.library_view.model().refresh_ids(dlg.linked)
+            current = self.gui.library_view.currentIndex()
+            if current.isValid():
+                self.gui.library_view.model().current_changed(current, QModelIndex())
+            info_dialog(self.gui, 'MangaUpdates',
+                'Linked %d book(s) to MangaUpdates.' % len(dlg.linked),
+                show=True)
+
+    def add_from_mu(self):
+        db = self.gui.current_db
+        config = cfg.plugin_prefs[cfg.STORE_NAME]
+
+        dlg = AddFromMUDialog(self.gui, config, db, apply_fn=self._apply_one)
+        dlg.exec_()
+
+        if dlg.added:
+            self.gui.library_view.model().books_added(len(dlg.added))
+            self.gui.library_view.model().refresh_ids(dlg.added)
+            self.gui.tags_view.recount()
+            info_dialog(self.gui, 'MangaUpdates',
+                'Added %d book(s) from MangaUpdates.' % len(dlg.added),
+                show=True)
 
     def download_metadata(self):
         rows = self.gui.library_view.selectionModel().selectedRows()
@@ -115,17 +163,25 @@ class MangaUpdatesAction(InterfaceAction):
             mu_url = find_mu_url(book_id, db, config)
             books_data.append((book_id, title, mu_url))
 
+        # For books with no MU URL, offer to link them first
+        missing = [(bid, title) for bid, title, url in books_data if not url]
+        if missing:
+            dlg = SearchLinkDialog(self.gui, missing, config, db)
+            dlg.exec_()
+
+            if dlg.linked:
+                self.gui.library_view.model().refresh_ids(dlg.linked)
+
+            # Re-discover URLs after linking
+            books_data = []
+            for book_id in book_ids:
+                title = db.title(book_id, index_is_id=True) or str(book_id)
+                mu_url = find_mu_url(book_id, db, config)
+                books_data.append((book_id, title, mu_url))
+
         found_count = sum(1 for _, _, url in books_data if url)
         if found_count == 0:
-            return error_dialog(self.gui, 'MangaUpdates',
-                'No MangaUpdates URL found for any of the selected books.\n\n'
-                'URLs are discovered from:\n'
-                '  \u2022 mangaupdates identifier\n'
-                '  \u2022 url/uri identifiers (if enabled)\n'
-                '  \u2022 Comments field (if enabled)\n'
-                '  \u2022 Custom column (default: #links, if enabled)\n\n'
-                'Configure discovery in Preferences \u2192 Plugins \u2192 MangaUpdates.',
-                show=True)
+            return
 
         # Fetch metadata in background
         dlg = DownloadProgressDialog(self.gui, books_data, config, db)

@@ -44,6 +44,7 @@ KEY_UPDATE_ARTISTS        = 'updateArtists'      # bool: apply artists to custom
 KEY_ARTISTS_COL           = 'artistsCol'         # str: column for artists
 KEY_ARTISTS_APPEND        = 'artistsAppend'      # bool: append or replace
 KEY_USER_AGENT            = 'userAgent'          # str: browser User-Agent to send
+KEY_LINK_COL              = 'linkCol'            # str: column to write MU link (markdown)
 
 DEFAULT_STORE_VALUES = {
     KEY_SCAN_IDENTIFIERS:  True,
@@ -71,6 +72,7 @@ DEFAULT_STORE_VALUES = {
     KEY_UPDATE_ARTISTS:       False,
     KEY_ARTISTS_COL:          '',
     KEY_ARTISTS_APPEND:       False,
+    KEY_LINK_COL:             '#links',
 }
 
 plugin_prefs = JSONConfig('plugins/MangaUpdates')
@@ -220,6 +222,19 @@ class ConfigWidget(QWidget):
 
         field_layout.setColumnStretch(3, 1)
 
+        # --- Link Column ---
+        link_group = QGroupBox('Link to MangaUpdates', self)
+        layout.addWidget(link_group)
+        link_layout = QGridLayout()
+        link_group.setLayout(link_layout)
+
+        link_layout.addWidget(QLabel('Write link to column:', self), 0, 0)
+        self.link_col_edit = QLineEdit(c.get(KEY_LINK_COL, DEFAULT_STORE_VALUES[KEY_LINK_COL]), self)
+        self.link_col_edit.setMaximumWidth(120)
+        link_layout.addWidget(self.link_col_edit, 0, 1)
+        link_layout.addWidget(QLabel('Appended as [MangaUpdates](url)', self), 0, 2)
+        link_layout.setColumnStretch(2, 1)
+
         layout.addStretch()
 
     def save_settings(self):
@@ -249,5 +264,6 @@ class ConfigWidget(QWidget):
             KEY_UPDATE_TITLE:         self.update_title_cb.isChecked(),
             KEY_UPDATE_ORIG_LANG:     self.update_orig_lang_cb.isChecked(),
             KEY_ORIG_LANG_COL:        self.orig_lang_col_edit.text().strip(),
+            KEY_LINK_COL:             self.link_col_edit.text().strip(),
         }
         plugin_prefs[STORE_NAME] = new_prefs
