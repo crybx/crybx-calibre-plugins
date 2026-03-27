@@ -82,21 +82,14 @@ def _inner_html(element):
     return ''.join(parts).strip()
 
 
-def fetch_nu_metadata(url, cf_cookie=None, user_agent=None, log=None):
-    """
-    Fetch and parse a novelupdates.com series page.
-
-    Returns a dict with the parsed fields, or None on failure.
-    Keys: title, authors, description, genres, tags, cover_url,
-          type, status, language, year, original_publisher,
-          english_publisher, assoc_names.
-    """
+def _fetch_page(url, cf_cookie=None, user_agent=None, log=None):
+    """Fetch a URL and return the parsed lxml root, or None on failure."""
     def _log(msg):
         if log:
             log(msg)
 
     if not HAS_LXML:
-        _log('ERROR: lxml is not available — cannot parse NovelUpdates page')
+        _log('ERROR: lxml is not available')
         return None
 
     _log('Fetching: ' + url)
@@ -117,7 +110,6 @@ def fetch_nu_metadata(url, cf_cookie=None, user_agent=None, log=None):
         response = urlopen(req, timeout=30)
         raw = response.read()
 
-        # Handle compression regardless of what we requested
         content_encoding = response.info().get('Content-Encoding', '')
         if content_encoding == 'gzip' or (raw[:2] == b'\x1f\x8b'):
             import gzip, io
@@ -132,14 +124,10 @@ def fetch_nu_metadata(url, cf_cookie=None, user_agent=None, log=None):
             except Exception as e:
                 _log('  brotli decompress failed (brotli not installed?): ' + str(e))
 
-        _log('  response: %d bytes, encoding=%r, first 200 chars: %r' % (
-            len(raw), content_encoding, raw[:200]))
+        _log('  response: %d bytes' % len(raw))
 
     except HTTPError as e:
         _log('HTTP error %d fetching %s' % (e.code, url))
-        if e.code == 403:
-            _log('  → 403 Forbidden: Cloudflare may be blocking the request. '
-                 'Try setting a cf_clearance cookie in the plugin config.')
         return None
     except URLError as e:
         _log('URL error fetching %s: %s' % (url, e))
@@ -149,9 +137,76 @@ def fetch_nu_metadata(url, cf_cookie=None, user_agent=None, log=None):
         return None
 
     try:
-        root = lxml_html.fromstring(raw)
+        return lxml_html.fromstring(raw)
     except Exception as e:
         _log('Failed to parse HTML: ' + str(e))
+        return None
+
+
+def search_nu_series(query, cf_cookie=None, user_agent=None, log=None):
+    """
+    Search NovelUpdates series-finder for series matching the query.
+
+    Returns a list of dicts: [{title, url, genres, type}, ...]
+    The series-finder page lists results with title, genre, and type columns.
+    """
+    try:
+        from urllib.parse import quote_plus
+    except ImportError:
+        from urllib import quote_plus
+
+    url = ('https://www.novelupdates.com/series-finder/?sf=1&sh='
+           + quote_plus(query))
+    root = _fetch_page(url, cf_cookie=cf_cookie, user_agent=user_agent, log=log)
+    if root is None:
+        return []
+
+    results = []
+    # Series-finder results are in .search_main_box_nu divs
+    for box in root.xpath('.//div[contains(@class,"search_main_box_nu")]'):
+        # Title and URL from the .search_title link
+        title_links = box.xpath('.//div[contains(@class,"search_title")]//a')
+        if not title_links:
+            continue
+        title = title_links[0].text_content().strip()
+        href = title_links[0].get('href', '')
+        if not title or not href:
+            continue
+
+        # Genre from .search_genre span
+        genre_els = box.xpath('.//div[contains(@class,"search_genre")]//a')
+        genres = ', '.join(g.text_content().strip() for g in genre_els
+                           if g.text_content().strip())
+
+        # Rating from .search_ratings div — text like "CN (3.9)" or "KR (4.5)"
+        rating_els = box.xpath('.//*[contains(@class,"search_ratings")]')
+        rating = rating_els[0].text_content().strip() if rating_els else ''
+
+        results.append({
+            'title': title,
+            'url': href.rstrip('/'),
+            'genres': genres,
+            'rating': rating,
+        })
+
+    return results
+
+
+def fetch_nu_metadata(url, cf_cookie=None, user_agent=None, log=None):
+    """
+    Fetch and parse a novelupdates.com series page.
+
+    Returns a dict with the parsed fields, or None on failure.
+    Keys: title, authors, description, genres, tags, cover_url,
+          type, status, language, year, original_publisher,
+          english_publisher, assoc_names.
+    """
+    def _log(msg):
+        if log:
+            log(msg)
+
+    root = _fetch_page(url, cf_cookie=cf_cookie, user_agent=user_agent, log=log)
+    if root is None:
         return None
 
     result = {}

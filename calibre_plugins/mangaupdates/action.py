@@ -344,13 +344,20 @@ class MangaUpdatesAction(InterfaceAction):
                 if apply_categories and mu_categories:
                     _write_tags(db_api, book_id, categories_col, categories_append, mu_categories)
 
-        # Associated Names
+        # Associated Names — use override pick if available, otherwise first name
         assoc_col = config.get(cfg.KEY_ASSOC_NAMES_COL, '').strip()
-        if assoc_col and overrides is not None and overrides.get('assoc_names', False):
-            selected = overrides.get('assoc_names_value', '').strip()
+        if assoc_col and _apply(cfg.KEY_UPDATE_ASSOC_NAMES, True, 'assoc_names'):
+            if overrides is not None:
+                selected = overrides.get('assoc_names_value', '').strip()
+            else:
+                names = data.get('assoc_names') or []
+                selected = names[0].strip() if names else ''
             if selected:
-                assoc_append = overrides.get('assoc_names_append',
-                                             config.get(cfg.KEY_ASSOC_NAMES_APPEND, True))
+                if overrides is not None:
+                    assoc_append = overrides.get('assoc_names_append',
+                                                 config.get(cfg.KEY_ASSOC_NAMES_APPEND, True))
+                else:
+                    assoc_append = config.get(cfg.KEY_ASSOC_NAMES_APPEND, True)
                 try:
                     existing = db_api.field_for(assoc_col, book_id)
                     if isinstance(existing, (list, tuple, frozenset)):

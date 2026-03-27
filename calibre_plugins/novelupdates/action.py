@@ -15,7 +15,9 @@ from calibre.gui2.actions import InterfaceAction
 import calibre_plugins.novelupdates.config as cfg
 from calibre_plugins.novelupdates.common_icons import set_plugin_icon_resources, get_icon
 from calibre_plugins.novelupdates.common_menus import create_menu_action_unique
-from calibre_plugins.novelupdates.dialogs import DownloadProgressDialog, ApplyMetadataDialog, BookDetailDialog
+from calibre_plugins.novelupdates.dialogs import (DownloadProgressDialog, ApplyMetadataDialog,
+                                                   BookDetailDialog, SearchLinkDialog,
+                                                   AddFromNUDialog)
 
 PLUGIN_ICONS = ['images/novelupdates.png']
 
@@ -87,8 +89,12 @@ class NovelUpdatesAction(InterfaceAction):
         self.menu = QMenu(self.gui)
         self.qaction.setMenu(self.menu)
 
-        create_menu_action_unique(self, self.menu, 'Download NovelUpdates Metadata',
+        create_menu_action_unique(self, self.menu, 'Download Novel Updates Metadata',
                                   PLUGIN_ICONS[0], triggered=self.download_metadata)
+        create_menu_action_unique(self, self.menu, 'Link to Novel Updates\u2026',
+                                  PLUGIN_ICONS[0], triggered=self.link_to_nu)
+        create_menu_action_unique(self, self.menu, 'Add from Novel Updates\u2026',
+                                  PLUGIN_ICONS[0], triggered=self.add_from_nu)
         self.menu.addSeparator()
         create_menu_action_unique(self, self.menu, 'Customize plugin\u2026',
                                   'config.png', shortcut=False,
@@ -98,10 +104,50 @@ class NovelUpdatesAction(InterfaceAction):
     def show_configuration(self):
         self.interface_action_base_plugin.do_user_config(self.gui)
 
+    def link_to_nu(self):
+        rows = self.gui.library_view.selectionModel().selectedRows()
+        if not rows:
+            return error_dialog(self.gui, 'Novel Updates',
+                'Select one or more books first.', show=True)
+
+        book_ids = list(self.gui.library_view.get_selected_ids())
+        db = self.gui.current_db
+        config = cfg.plugin_prefs[cfg.STORE_NAME]
+
+        books_data = [(bid, db.title(bid, index_is_id=True) or str(bid))
+                      for bid in book_ids]
+
+        dlg = SearchLinkDialog(self.gui, books_data, config, db)
+        dlg.exec_()
+
+        if dlg.linked:
+            self.gui.library_view.model().refresh_ids(dlg.linked)
+            current = self.gui.library_view.currentIndex()
+            if current.isValid():
+                self.gui.library_view.model().current_changed(current, QModelIndex())
+            info_dialog(self.gui, 'Novel Updates',
+                'Linked %d book(s) to NovelUpdates.' % len(dlg.linked),
+                show=True)
+
+    def add_from_nu(self):
+        db = self.gui.current_db
+        config = cfg.plugin_prefs[cfg.STORE_NAME]
+
+        dlg = AddFromNUDialog(self.gui, config, db, apply_fn=self._apply_one)
+        dlg.exec_()
+
+        if dlg.added:
+            self.gui.library_view.model().books_added(len(dlg.added))
+            self.gui.library_view.model().refresh_ids(dlg.added)
+            self.gui.tags_view.recount()
+            info_dialog(self.gui, 'Novel Updates',
+                'Added %d book(s) from NovelUpdates.' % len(dlg.added),
+                show=True)
+
     def download_metadata(self):
         rows = self.gui.library_view.selectionModel().selectedRows()
         if not rows:
-            return error_dialog(self.gui, 'NovelUpdates',
+            return error_dialog(self.gui, 'Novel Updates',
                 'Select one or more books first.', show=True)
 
         book_ids = list(self.gui.library_view.get_selected_ids())
@@ -115,17 +161,23 @@ class NovelUpdatesAction(InterfaceAction):
             nu_url = find_nu_url(book_id, db, config)
             books_data.append((book_id, title, nu_url))
 
+        # For books with no NU URL, offer to link them first
+        missing = [(bid, title) for bid, title, url in books_data if not url]
+        if missing:
+            dlg = SearchLinkDialog(self.gui, missing, config, db)
+            dlg.exec_()
+            if dlg.linked:
+                self.gui.library_view.model().refresh_ids(dlg.linked)
+            # Re-discover after linking
+            books_data = []
+            for book_id in book_ids:
+                title = db.title(book_id, index_is_id=True) or str(book_id)
+                nu_url = find_nu_url(book_id, db, config)
+                books_data.append((book_id, title, nu_url))
+
         found_count = sum(1 for _, _, url in books_data if url)
         if found_count == 0:
-            return error_dialog(self.gui, 'NovelUpdates',
-                'No NovelUpdates URL found for any of the selected books.\n\n'
-                'URLs are discovered from:\n'
-                '  • novelupdates identifier\n'
-                '  • url/uri identifiers (if enabled)\n'
-                '  • Comments field (if enabled)\n'
-                '  • Custom column (default: #links, if enabled)\n\n'
-                'Configure discovery in Preferences → Plugins → NovelUpdates.',
-                show=True)
+            return
 
         # Strip 'cf_clearance=' prefix if user accidentally pasted the full cookie string
         cf_cookie = config.get(cfg.KEY_CF_COOKIE, '').strip()
@@ -144,7 +196,7 @@ class NovelUpdatesAction(InterfaceAction):
                 r = results.get(book_id, {})
                 for line in r.get('_log', []):
                     log_lines.append('[%s] %s' % (title, line))
-            return error_dialog(self.gui, 'NovelUpdates',
+            return error_dialog(self.gui, 'Novel Updates',
                 'No metadata could be downloaded.\n\n'
                 'If blocked by Cloudflare: make sure the cf_clearance cookie '
                 'value is correct and that your browser\'s User-Agent matches '
@@ -288,13 +340,20 @@ class NovelUpdatesAction(InterfaceAction):
                 if apply_tags and nu_tags:
                     _write_tags(db_api, book_id, tags_col, tags_append, nu_tags)
 
-        # Associated Names — requires explicit pick in detail dialog; skip on bulk apply
+        # Associated Names — use override pick if available, otherwise first name
         assoc_col = config.get(cfg.KEY_ASSOC_NAMES_COL, '').strip()
-        if assoc_col and overrides is not None and overrides.get('assoc_names', False):
-            selected = overrides.get('assoc_names_value', '').strip()
+        if assoc_col and _apply(cfg.KEY_UPDATE_ASSOC_NAMES, True, 'assoc_names'):
+            if overrides is not None:
+                selected = overrides.get('assoc_names_value', '').strip()
+            else:
+                names = data.get('assoc_names') or []
+                selected = names[0].strip() if names else ''
             if selected:
-                assoc_append = overrides.get('assoc_names_append',
-                                             config.get(cfg.KEY_ASSOC_NAMES_APPEND, True))
+                if overrides is not None:
+                    assoc_append = overrides.get('assoc_names_append',
+                                                 config.get(cfg.KEY_ASSOC_NAMES_APPEND, True))
+                else:
+                    assoc_append = config.get(cfg.KEY_ASSOC_NAMES_APPEND, True)
                 try:
                     existing = db_api.field_for(assoc_col, book_id)
                     if isinstance(existing, (list, tuple, frozenset)):
@@ -349,7 +408,7 @@ class NovelUpdatesAction(InterfaceAction):
                 self.gui.library_view.model().current_changed(current, QModelIndex())
             self.gui.tags_view.recount()
 
-        info_dialog(self.gui, 'NovelUpdates',
+        info_dialog(self.gui, 'Novel Updates',
             'Updated metadata for %d book(s).' % len(all_updated),
             show=True)
 

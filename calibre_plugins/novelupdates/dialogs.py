@@ -10,7 +10,7 @@ try:
                          QTableWidgetItem, QAbstractItemView, QHeaderView,
                          QDialogButtonBox, QScrollArea, QWidget,
                          QThread, pyqtSignal, QPixmap, QCheckBox, QPlainTextEdit,
-                         QComboBox)
+                         QComboBox, QLineEdit)
 except ImportError:
     from PyQt5.Qt import (Qt, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                           QPushButton, QProgressBar, QTableWidget,
@@ -104,7 +104,7 @@ class DownloadProgressDialog(QDialog):
         self.db = db
         self.results = {}
 
-        self.setWindowTitle('Downloading NovelUpdates Metadata')
+        self.setWindowTitle('Downloading Novel Updates Metadata')
         self.setMinimumWidth(450)
 
         layout = QVBoxLayout(self)
@@ -584,7 +584,7 @@ class ApplyMetadataDialog(QDialog):
         self.db              = db
         self._apply_book_fn  = apply_book_fn
 
-        self.setWindowTitle('Apply NovelUpdates Metadata')
+        self.setWindowTitle('Apply Novel Updates Metadata')
         self.setMinimumWidth(620)
         self.setMinimumHeight(300)
 
@@ -665,3 +665,600 @@ class ApplyMetadataDialog(QDialog):
             self._found.pop(row)
             if not self._found:
                 self.accept()
+
+
+# ---------------------------------------------------------------------------
+# Search worker
+# ---------------------------------------------------------------------------
+
+class _SearchWorker(QThread):
+    finished = pyqtSignal(list)
+    error = pyqtSignal(str)
+
+    def __init__(self, query, cf_cookie=None, user_agent=None, parent=None):
+        QThread.__init__(self, parent)
+        self.query = query
+        self.cf_cookie = cf_cookie
+        self.user_agent = user_agent
+
+    def run(self):
+        from calibre_plugins.novelupdates.scraper import search_nu_series
+        try:
+            results = search_nu_series(self.query, cf_cookie=self.cf_cookie,
+                                       user_agent=self.user_agent)
+            self.finished.emit(results or [])
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+# ---------------------------------------------------------------------------
+# Metadata fetch worker (single series page)
+# ---------------------------------------------------------------------------
+
+class _MetadataFetchWorker(QThread):
+    finished = pyqtSignal(dict)
+
+    def __init__(self, url, cf_cookie=None, user_agent=None, parent=None):
+        QThread.__init__(self, parent)
+        self.url = url
+        self.cf_cookie = cf_cookie
+        self.user_agent = user_agent
+
+    def run(self):
+        from calibre_plugins.novelupdates.scraper import fetch_nu_metadata
+        try:
+            data = fetch_nu_metadata(self.url, cf_cookie=self.cf_cookie,
+                                     user_agent=self.user_agent)
+            if data:
+                data['_url'] = self.url
+                self.finished.emit(data)
+            else:
+                self.finished.emit({'_failed': True})
+        except Exception:
+            self.finished.emit({'_failed': True})
+
+
+# ---------------------------------------------------------------------------
+# Search & Link dialog
+# ---------------------------------------------------------------------------
+
+class SearchLinkDialog(QDialog):
+    '''Search NovelUpdates and link a series to each selected book.'''
+
+    linked = []
+
+    def __init__(self, parent, books_data, config, db):
+        QDialog.__init__(self, parent)
+        self._books = list(books_data)
+        self._config = config
+        self._db = db
+        self._current_idx = 0
+        self.linked = []
+        self._worker = None
+        self._results = []
+
+        self.setWindowTitle('Link to Novel Updates')
+        self.setMinimumSize(750, 500)
+
+        layout = QVBoxLayout(self)
+        self.setLayout(layout)
+
+        self._book_label = QLabel(self)
+        self._book_label.setWordWrap(True)
+        layout.addWidget(self._book_label)
+
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(QLabel('Search:', self))
+        self._search_edit = QLineEdit(self)
+        self._search_edit.returnPressed.connect(self._do_search)
+        search_layout.addWidget(self._search_edit)
+        self._search_btn = QPushButton('Search', self)
+        self._search_btn.clicked.connect(self._do_search)
+        search_layout.addWidget(self._search_btn)
+        layout.addLayout(search_layout)
+
+        self._table = QTableWidget(0, 3, self)
+        self._table.setHorizontalHeaderLabels(['Title', 'Genre', 'Rating'])
+        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        hh = self._table.horizontalHeader()
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self._table.verticalHeader().setVisible(False)
+        self._table.setWordWrap(True)
+        self._table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self._table.itemSelectionChanged.connect(self._on_selection)
+        layout.addWidget(self._table)
+
+        self._status = QLabel('', self)
+        self._status.setStyleSheet('color: #555;')
+        layout.addWidget(self._status)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        if len(self._books) > 1:
+            self._skip_btn = QPushButton('Skip', self)
+            self._skip_btn.clicked.connect(self._skip)
+            btn_layout.addWidget(self._skip_btn)
+        self._link_btn = QPushButton('Link', self)
+        self._link_btn.setEnabled(False)
+        self._link_btn.clicked.connect(self._link)
+        btn_layout.addWidget(self._link_btn)
+        close_btn = QPushButton('Close', self)
+        close_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(close_btn)
+        layout.addLayout(btn_layout)
+
+        self._load_book(0)
+
+    def _load_book(self, idx):
+        if idx >= len(self._books):
+            self.accept()
+            return
+        self._current_idx = idx
+        book_id, title = self._books[idx]
+        if len(self._books) > 1:
+            self._book_label.setText('<b>Book %d of %d:</b> %s' % (idx + 1, len(self._books), title))
+        else:
+            self._book_label.setText('<b>%s</b>' % title)
+        self._search_edit.setText(title)
+        self._table.setRowCount(0)
+        self._results = []
+        self._link_btn.setEnabled(False)
+        self._status.setText('')
+        self._do_search()
+
+    def _do_search(self):
+        query = self._search_edit.text().strip()
+        if not query:
+            return
+        self._status.setText('Searching\u2026')
+        self._search_btn.setEnabled(False)
+        self._link_btn.setEnabled(False)
+        self._table.setRowCount(0)
+
+        if self._worker is not None:
+            try:
+                self._worker.finished.disconnect()
+                self._worker.error.disconnect()
+            except Exception:
+                pass
+
+        from calibre_plugins.novelupdates.config import KEY_CF_COOKIE, KEY_USER_AGENT
+        cf = self._config.get(KEY_CF_COOKIE, '').strip()
+        if cf.lower().startswith('cf_clearance='):
+            cf = cf[len('cf_clearance='):]
+        ua = self._config.get(KEY_USER_AGENT, '').strip() or None
+        self._worker = _SearchWorker(query, cf_cookie=cf or None,
+                                     user_agent=ua, parent=self)
+        self._worker.finished.connect(self._on_results)
+        self._worker.error.connect(self._on_error)
+        self._worker.start()
+
+    def _on_results(self, results):
+        self._search_btn.setEnabled(True)
+        self._results = results
+        self._table.setRowCount(len(results))
+        for row, r in enumerate(results):
+            self._table.setItem(row, 0, QTableWidgetItem(r.get('title', '')))
+            self._table.setItem(row, 1, QTableWidgetItem(r.get('genres', '')))
+            self._table.setItem(row, 2, QTableWidgetItem(r.get('rating', '')))
+        if not results:
+            self._status.setText(
+                'No results. If Cloudflare is blocking, set cf_clearance in plugin config.')
+        else:
+            self._status.setText('%d series found.' % len(results))
+
+    def _on_error(self, msg):
+        self._search_btn.setEnabled(True)
+        self._status.setText('Error: ' + msg)
+
+    def _on_selection(self):
+        rows = self._table.selectionModel().selectedRows()
+        self._link_btn.setEnabled(bool(rows))
+
+    def _selected_result(self):
+        rows = self._table.selectionModel().selectedRows()
+        if not rows:
+            return None
+        return self._results[rows[0].row()]
+
+    def _link(self):
+        result = self._selected_result()
+        if not result:
+            return
+        book_id = self._books[self._current_idx][0]
+        self._write_link(book_id, result['url'])
+        self.linked.append(book_id)
+        self._load_book(self._current_idx + 1)
+
+    def _skip(self):
+        self._load_book(self._current_idx + 1)
+
+    def _write_link(self, book_id, nu_url):
+        db = self._db
+        db_api = db.new_api if hasattr(db, 'new_api') else db
+
+        try:
+            db.set_identifier(book_id, 'novelupdates', nu_url, index_is_id=True)
+        except Exception:
+            pass
+
+        from calibre_plugins.novelupdates.config import KEY_LINK_COL
+        link_col = self._config.get(KEY_LINK_COL, '#links').strip()
+        if not link_col:
+            return
+
+        md_link = '[Novel Updates](%s)' % nu_url
+        try:
+            existing = db_api.field_for(link_col, book_id)
+            if existing:
+                if isinstance(existing, (list, tuple)):
+                    existing = ', '.join(str(v) for v in existing)
+                existing = str(existing)
+                nu_link_re = re.compile(
+                    r'\[Novel\s*Updates\]\([^)]*novelupdates\.com[^)]*\)', re.IGNORECASE)
+                if nu_link_re.search(existing):
+                    new_val = nu_link_re.sub(md_link, existing)
+                else:
+                    new_val = existing + ', \n' + md_link
+            else:
+                new_val = md_link
+            db_api.set_field(link_col, {book_id: new_val})
+        except Exception as e:
+            print('NovelUpdates: failed to write link to %s: %s' % (link_col, e))
+
+
+# ---------------------------------------------------------------------------
+# Series preview dialog (for Add from NovelUpdates)
+# ---------------------------------------------------------------------------
+
+class _SeriesPreviewDialog(QDialog):
+
+    def __init__(self, parent, data, config, db=None):
+        QDialog.__init__(self, parent)
+        self.setWindowTitle('Preview: ' + (data.get('title') or ''))
+        self.setMinimumSize(700, 550)
+        self._data = data
+        self._cover_worker = None
+        self._checkboxes = {}
+
+        from calibre_plugins.novelupdates.config import (
+            KEY_GENRES_COL, KEY_TAGS_COL,
+            KEY_ASSOC_NAMES_COL, KEY_ORIG_LANG_COL)
+        from calibre_plugins.novelupdates.action import _nu_language_to_code
+        from calibre_plugins.novelupdates.common_lang import resolve_lang_for_column
+        from calibre.utils.localization import calibre_langcode_to_name
+
+        layout = QVBoxLayout(self)
+        self.setLayout(layout)
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        body = QVBoxLayout(container)
+        body.setSpacing(6)
+
+        # Header: cover + title/info
+        header = QHBoxLayout()
+        header.setSpacing(12)
+        self._cover_img = _cover_label('Loading\u2026' if data.get('cover_url') else '(no cover)')
+        header.addWidget(self._cover_img, 0, Qt.AlignmentFlag.AlignTop)
+
+        title_info = QVBoxLayout()
+        title_info.setSpacing(2)
+        title_info.addWidget(QLabel('<h3>%s</h3>' % (data.get('title') or '')))
+        info_parts = []
+        if data.get('type'):
+            info_parts.append('<b>Type:</b> ' + data['type'])
+        if data.get('year'):
+            info_parts.append('<b>Year:</b> ' + data['year'])
+        if data.get('status'):
+            info_parts.append('<b>Status:</b> ' + data['status'])
+        if data.get('language'):
+            info_parts.append('<b>Language:</b> ' + data['language'])
+        if info_parts:
+            lbl = QLabel('  |  '.join(info_parts))
+            lbl.setWordWrap(True)
+            title_info.addWidget(lbl)
+        if data.get('assoc_names'):
+            lbl = QLabel('<i>Also known as: ' + ', '.join(data['assoc_names']) + '</i>')
+            lbl.setWordWrap(True)
+            lbl.setStyleSheet('color: #666;')
+            title_info.addWidget(lbl)
+        if data.get('cover_url'):
+            cb = QCheckBox('Include Cover', container)
+            cb.setChecked(True)
+            cb.setStyleSheet('font-weight: bold;')
+            self._checkboxes['cover'] = cb
+            title_info.addWidget(cb)
+        title_info.addStretch()
+        header.addLayout(title_info, 1)
+        body.addLayout(header)
+        body.addSpacing(4)
+
+        # Per-field sections
+        def _add_field(field_name, label, value, default_on=True):
+            if not value:
+                return
+            cb = QCheckBox(label, container)
+            cb.setChecked(default_on)
+            cb.setStyleSheet('font-weight: bold;')
+            self._checkboxes[field_name] = cb
+            body.addWidget(cb)
+            val_w = QPlainTextEdit(value)
+            val_w.setReadOnly(True)
+            line_h = val_w.fontMetrics().lineSpacing()
+            lines = value.count('\n') + max(1, len(value) // 60)
+            val_w.setFixedHeight(min(lines, 4) * line_h + 12)
+            val_w.setStyleSheet('background: #fafafa; border: 1px solid #ddd;')
+            body.addWidget(val_w)
+
+        _add_field('authors', 'Authors', ', '.join(data.get('authors') or []))
+
+        lang_code = _nu_language_to_code(data.get('language') or '')
+        if lang_code:
+            orig_lang_col = config.get(KEY_ORIG_LANG_COL, '').strip()
+            if orig_lang_col and db:
+                lang_display = resolve_lang_for_column(db, orig_lang_col, lang_code) or calibre_langcode_to_name(lang_code)
+            else:
+                lang_display = calibre_langcode_to_name(lang_code)
+            _add_field('orig_lang', 'Orig. Language', lang_display)
+
+        _add_field('genres', 'Genres', ', '.join(data.get('genres') or []))
+        _add_field('tags', 'Tags', ', '.join(data.get('tags') or []))
+
+        # Assoc names combo
+        assoc_col = config.get(KEY_ASSOC_NAMES_COL, '').strip()
+        assoc_list = data.get('assoc_names') or []
+        if assoc_list and assoc_col:
+            cb = QCheckBox('Assoc. Name \u2192 %s' % assoc_col, container)
+            cb.setChecked(True)
+            cb.setStyleSheet('font-weight: bold;')
+            self._checkboxes['assoc_names'] = cb
+            body.addWidget(cb)
+            self._assoc_combo = QComboBox(container)
+            for name in assoc_list:
+                self._assoc_combo.addItem(name)
+            body.addWidget(self._assoc_combo)
+        else:
+            self._assoc_combo = None
+
+        desc_html = data.get('description') or ''
+        if desc_html:
+            cb = QCheckBox('Description', container)
+            cb.setChecked(True)
+            cb.setStyleSheet('font-weight: bold;')
+            self._checkboxes['description'] = cb
+            body.addWidget(cb)
+            desc_edit = QPlainTextEdit(_strip_html(desc_html))
+            desc_edit.setReadOnly(True)
+            desc_edit.setMinimumHeight(120)
+            desc_edit.setStyleSheet('background: #fafafa; border: 1px solid #ddd;')
+            body.addWidget(desc_edit, 1)
+
+        body.addStretch()
+        scroll.setWidget(container)
+        layout.addWidget(scroll)
+
+        buttons = QDialogButtonBox(self)
+        buttons.addButton('Add to Library', QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.addButton('Close', QDialogButtonBox.ButtonRole.RejectRole)
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        if data.get('cover_url'):
+            self._cover_worker = _CoverFetchWorker(data['cover_url'], self)
+            self._cover_worker.cover_fetched.connect(self._on_cover)
+            self._cover_worker.start()
+
+    def _on_cover(self, img_data):
+        pm = _pixmap_from_bytes(img_data)
+        if pm:
+            self._cover_img.setPixmap(_scale_pixmap(pm))
+            self._cover_img.setText('')
+        else:
+            self._cover_img.setText('(failed)')
+
+    def _on_accept(self):
+        fields = {fname: cb.isChecked() for fname, cb in self._checkboxes.items()}
+        if self._assoc_combo is not None:
+            fields['assoc_names_value'] = self._assoc_combo.currentText()
+        self._data['_apply_fields'] = fields
+        self.accept()
+
+
+# ---------------------------------------------------------------------------
+# Add from NovelUpdates dialog
+# ---------------------------------------------------------------------------
+
+class AddFromNUDialog(QDialog):
+
+    added = []
+
+    def __init__(self, parent, config, db, apply_fn=None):
+        QDialog.__init__(self, parent)
+        self._config = config
+        self._db = db
+        self._apply_fn = apply_fn
+        self.added = []
+        self._search_worker = None
+        self._fetch_worker = None
+        self._results = []
+
+        self.setWindowTitle('Add from Novel Updates')
+        self.setMinimumSize(750, 500)
+
+        layout = QVBoxLayout(self)
+        self.setLayout(layout)
+
+        hint = QLabel('Double-click a result to preview, then add to library.', self)
+        hint.setStyleSheet('color: #555; font-style: italic;')
+        layout.addWidget(hint)
+
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(QLabel('Search:', self))
+        self._search_edit = QLineEdit(self)
+        self._search_edit.returnPressed.connect(self._do_search)
+        search_layout.addWidget(self._search_edit)
+        self._search_btn = QPushButton('Search', self)
+        self._search_btn.clicked.connect(self._do_search)
+        search_layout.addWidget(self._search_btn)
+        layout.addLayout(search_layout)
+
+        self._table = QTableWidget(0, 3, self)
+        self._table.setHorizontalHeaderLabels(['Title', 'Genre', 'Rating'])
+        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        hh = self._table.horizontalHeader()
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self._table.verticalHeader().setVisible(False)
+        self._table.setWordWrap(True)
+        self._table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self._table.cellDoubleClicked.connect(self._on_double_click)
+        layout.addWidget(self._table)
+
+        self._status = QLabel('', self)
+        self._status.setStyleSheet('color: #555;')
+        self._status.setWordWrap(True)
+        layout.addWidget(self._status)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        close_btn = QPushButton('Close', self)
+        close_btn.clicked.connect(self.accept)
+        btn_layout.addWidget(close_btn)
+        layout.addLayout(btn_layout)
+
+        self._search_edit.setFocus()
+
+    def _do_search(self):
+        query = self._search_edit.text().strip()
+        if not query:
+            return
+        self._status.setText('Searching\u2026')
+        self._search_btn.setEnabled(False)
+        self._table.setRowCount(0)
+
+        if self._search_worker is not None:
+            try:
+                self._search_worker.finished.disconnect()
+                self._search_worker.error.disconnect()
+            except Exception:
+                pass
+
+        from calibre_plugins.novelupdates.config import KEY_CF_COOKIE, KEY_USER_AGENT
+        cf = self._config.get(KEY_CF_COOKIE, '').strip()
+        if cf.lower().startswith('cf_clearance='):
+            cf = cf[len('cf_clearance='):]
+        ua = self._config.get(KEY_USER_AGENT, '').strip() or None
+        self._search_worker = _SearchWorker(query, cf_cookie=cf or None,
+                                            user_agent=ua, parent=self)
+        self._search_worker.finished.connect(self._on_results)
+        self._search_worker.error.connect(self._on_search_error)
+        self._search_worker.start()
+
+    def _on_results(self, results):
+        self._search_btn.setEnabled(True)
+        self._results = results
+        self._table.setRowCount(len(results))
+        for row, r in enumerate(results):
+            self._table.setItem(row, 0, QTableWidgetItem(r.get('title', '')))
+            self._table.setItem(row, 1, QTableWidgetItem(r.get('genres', '')))
+            self._table.setItem(row, 2, QTableWidgetItem(r.get('rating', '')))
+        if not results:
+            self._status.setText(
+                'No results. If Cloudflare is blocking, set cf_clearance in plugin config.')
+        else:
+            self._status.setText('%d series found.' % len(results))
+
+    def _on_search_error(self, msg):
+        self._search_btn.setEnabled(True)
+        self._status.setText('Error: ' + msg)
+
+    def _on_double_click(self, row, _col):
+        if row < 0 or row >= len(self._results):
+            return
+        result = self._results[row]
+        self._status.setText('Fetching metadata\u2026')
+        self._search_btn.setEnabled(False)
+
+        if self._fetch_worker is not None:
+            try:
+                self._fetch_worker.finished.disconnect()
+            except Exception:
+                pass
+
+        from calibre_plugins.novelupdates.config import KEY_CF_COOKIE, KEY_USER_AGENT
+        cf = self._config.get(KEY_CF_COOKIE, '').strip()
+        if cf.lower().startswith('cf_clearance='):
+            cf = cf[len('cf_clearance='):]
+        ua = self._config.get(KEY_USER_AGENT, '').strip() or None
+        self._fetch_worker = _MetadataFetchWorker(result['url'],
+                                                   cf_cookie=cf or None,
+                                                   user_agent=ua, parent=self)
+        self._fetch_worker.finished.connect(self._on_metadata)
+        self._fetch_worker.start()
+
+    def _on_metadata(self, data):
+        self._search_btn.setEnabled(True)
+
+        if data.get('_failed'):
+            self._status.setText('Failed to fetch metadata.')
+            return
+
+        self._status.setText('')
+        preview = _SeriesPreviewDialog(self, data, self._config, db=self._db)
+        if preview.exec_() != preview.Accepted:
+            return
+
+        self._create_book(data)
+
+    def _create_book(self, data):
+        nu_url = data.get('_url', '')
+        title = data.get('title') or 'Unknown'
+        authors = data.get('authors') or ['Unknown']
+
+        from calibre.ebooks.metadata.book.base import Metadata
+        mi = Metadata(title, authors)
+        db = self._db
+
+        try:
+            book_id = db.import_book(mi, [])
+        except Exception as e:
+            self._status.setText('Failed to create book: %s' % e)
+            return
+
+        if self._apply_fn:
+            from calibre_plugins.novelupdates.config import DEFAULT_STORE_VALUES
+            add_config = dict(self._config)
+            add_config.update({k: True for k, v in DEFAULT_STORE_VALUES.items()
+                               if isinstance(v, bool)})
+            for k in DEFAULT_STORE_VALUES:
+                if k.lower().endswith('append'):
+                    add_config[k] = False
+            self._apply_fn(book_id, nu_url, data, db, add_config)
+
+        from calibre_plugins.novelupdates.config import KEY_LINK_COL
+        link_col = self._config.get(KEY_LINK_COL, '#links').strip()
+        if link_col:
+            md_link = '[Novel Updates](%s)' % nu_url
+            try:
+                db_api = db.new_api if hasattr(db, 'new_api') else db
+                db_api.set_field(link_col, {book_id: md_link})
+            except Exception:
+                pass
+
+        try:
+            db.set_identifier(book_id, 'novelupdates', nu_url, index_is_id=True)
+        except Exception:
+            pass
+
+        self.added.append(book_id)
+        self._status.setText('Added: %s' % title)
