@@ -94,6 +94,9 @@ class BookModifier(object):
             if options['save_title_author_to_description']:
                 self._save_title_author_to_description()
 
+            if options['save_title_to_originaltitle']:
+                self._save_title_to_originaltitle()
+
             # If the user is updating metadata, we need to do this as a separate
             # step at the start, because it takes a stream object as input so is
             # run before we have written any container changes to disk below.
@@ -196,6 +199,24 @@ class BookModifier(object):
             self._custom_metadata_updates = {}
         self._custom_metadata_updates['comments'] = new_comments
         self.log('\t  Added: %s' % header)
+
+    def _save_title_to_originaltitle(self):
+        """Copy the current title to the #originaltitle custom column"""
+        self.log('\tSaving title to #originaltitle')
+
+        if not hasattr(self, 'mi') or not self.mi:
+            self.log('\t  No metadata object available')
+            return
+
+        title = self.mi.title or ''
+        if not title:
+            self.log('\t  No title found')
+            return
+
+        if not hasattr(self, '_custom_metadata_updates'):
+            self._custom_metadata_updates = {}
+        self._custom_metadata_updates['#originaltitle'] = title
+        self.log('\t  Saved: %s' % title)
 
     def _update_metadata_and_cover(self, epub_path):
         self.log('\tUpdating metadata and cover')

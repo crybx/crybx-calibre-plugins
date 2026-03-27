@@ -32,6 +32,7 @@ META_OPTIONS = [
     ('add_unmanifested_files', 'Add unmanifested files to manifest', 'Add files to manifest that are in the epub but do not exist in the .opf manifest\n(excluding iTunes/calibre bookmarks)'),
     ('remove_calibre_bookmarks', 'Remove calibre bookmark files', 'Remove any bookmark files added by the calibre ebook viewer'),
     ('save_title_author_to_description', 'Save title and author to description', 'Prepend "title by author" to the top of the description field'),
+    ('save_title_to_originaltitle', 'Save title to #originaltitle', 'Copy the current title to the #originaltitle custom column'),
 ]
 
 TEXTREPLACE_OPTIONS = [
