@@ -40,7 +40,7 @@ def readPluginDetails():
     return shortName, pluginName, version
 
 def getPluginZipPath(pluginName):
-    zipFile = os.path.join(os.getcwd(), pluginName+'.zip')
+    zipFile = os.path.join(os.getcwd(), '..', 'installs', pluginName+'.zip')
     if not os.path.exists(zipFile):
         print('ERROR: No zip file found for this plugin at: {}'.format(zipFile))
         raise FileNotFoundError(zipFile)

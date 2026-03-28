@@ -103,7 +103,9 @@ def readPluginName():
 
 if __name__=="__main__":
 
-    zipFileName = os.path.join('..', readPluginName())
+    installsDir = os.path.join('..', 'installs')
+    os.makedirs(installsDir, exist_ok=True)
+    zipFileName = os.path.join(installsDir, readPluginName())
 
     adjustCommonImports()
 

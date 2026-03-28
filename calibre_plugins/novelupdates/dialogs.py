@@ -20,6 +20,13 @@ except ImportError:
                           QComboBox)
 
 from calibre_plugins.novelupdates.jobs import FetchWorker
+from calibre_plugins.novelupdates.common_icons import get_icon
+
+PLUGIN_ICON = 'images/novelupdates.png'
+
+
+def _set_dialog_icon(dlg):
+    dlg.setWindowIcon(get_icon(PLUGIN_ICON))
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +106,7 @@ class DownloadProgressDialog(QDialog):
 
     def __init__(self, parent, books_data, cf_cookie, config, db):
         QDialog.__init__(self, parent)
+        _set_dialog_icon(self)
         self.books_data = books_data
         self.config = config
         self.db = db
@@ -161,7 +169,8 @@ class BookDetailDialog(QDialog):
 
     def __init__(self, parent, book_id, book_title, data, config, db, can_apply=False):
         QDialog.__init__(self, parent)
-        self.setWindowTitle('Preview: ' + book_title)
+        _set_dialog_icon(self)
+        self.setWindowTitle('NovelUpdates - Preview: ' + book_title)
         self.setMinimumSize(820, 600)
         self._data = data
         self._checkboxes = {}   # field_name → QCheckBox (standalone apply, no append)
@@ -578,6 +587,7 @@ class ApplyMetadataDialog(QDialog):
 
     def __init__(self, parent, results, books_data, config, db, apply_book_fn=None):
         QDialog.__init__(self, parent)
+        _set_dialog_icon(self)
         self.results         = results
         self.books_data      = books_data
         self.config          = config
@@ -729,6 +739,7 @@ class SearchLinkDialog(QDialog):
 
     def __init__(self, parent, books_data, config, db):
         QDialog.__init__(self, parent)
+        _set_dialog_icon(self)
         self._books = list(books_data)
         self._config = config
         self._db = db
@@ -919,7 +930,8 @@ class _SeriesPreviewDialog(QDialog):
 
     def __init__(self, parent, data, config, db=None):
         QDialog.__init__(self, parent)
-        self.setWindowTitle('Preview: ' + (data.get('title') or ''))
+        _set_dialog_icon(self)
+        self.setWindowTitle('NovelUpdates - Preview: ' + (data.get('title') or ''))
         self.setMinimumSize(700, 550)
         self._data = data
         self._cover_worker = None
@@ -1081,6 +1093,7 @@ class AddFromNUDialog(QDialog):
 
     def __init__(self, parent, config, db, apply_fn=None):
         QDialog.__init__(self, parent)
+        _set_dialog_icon(self)
         self._config = config
         self._db = db
         self._apply_fn = apply_fn

@@ -17,8 +17,8 @@ python3 "$COMMON_DIR/build.py"
 echo "Deleting common files after zip"
 rm -f common_*.py
 
-# Find the most recently modified zip in parent dir
-PLUGIN_ZIP=$(ls -t ../*.zip 2>/dev/null | head -1)
+# Find the most recently modified zip in installs dir
+PLUGIN_ZIP=$(ls -t ../installs/*.zip 2>/dev/null | head -1)
 
 if [ -z "$PLUGIN_ZIP" ]; then
     echo "ERROR: No plugin zip file found"

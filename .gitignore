@@ -1,4 +1,4 @@
 .idea
-/calibre_plugins/*.zip
+/calibre_plugins/installs/
 
 __pycache__

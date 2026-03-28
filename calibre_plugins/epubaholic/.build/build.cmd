@@ -26,13 +26,13 @@ echo Deleting common files after zip
 del common_*.py
 
 rem Determine the zip file that just got created
-for /F "delims=" %%I in ('DIR "*.zip" /A-D /B /O:D') do set "PLUGIN_ZIP=%%I"
+for /F "delims=" %%I in ('DIR "..\installs\*.zip" /A-D /B /O:D') do set "PLUGIN_ZIP=%%I"
 
-echo Installing plugin "%PLUGIN_ZIP%" into calibre...
+echo Installing plugin "..\installs\%PLUGIN_ZIP%" into calibre...
 if defined CALIBRE_DIRECTORY (
-    "%CALIBRE_DIRECTORY%\calibre-customize" -a "%PLUGIN_ZIP%"
+    "%CALIBRE_DIRECTORY%\calibre-customize" -a "..\installs\%PLUGIN_ZIP%"
 ) else (
-    calibre-customize -a "%PLUGIN_ZIP%"
+    calibre-customize -a "..\installs\%PLUGIN_ZIP%"
 )
 echo Build completed successfully
 
