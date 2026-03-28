@@ -20,6 +20,7 @@ KEY_SCAN_IDENTIFIERS  = 'scanIdentifiers'   # bool: scan url/uri identifiers
 KEY_SCAN_COMMENTS     = 'scanComments'      # bool: scan comments field
 KEY_SCAN_CUSTOM_COL   = 'scanCustomCol'     # bool: scan a custom column
 KEY_CUSTOM_COL_NAME   = 'customColName'     # str:  name of the custom column to scan
+KEY_SEARCH_TITLE_COLS = 'searchTitleCols'   # str:  comma-separated columns for search title
 
 # Field mapping — what to write and where
 KEY_UPDATE_GENRES         = 'updateGenres'       # bool: apply by default
@@ -51,6 +52,7 @@ DEFAULT_STORE_VALUES = {
     KEY_SCAN_COMMENTS:     True,
     KEY_SCAN_CUSTOM_COL:   True,
     KEY_CUSTOM_COL_NAME:   '#links',
+    KEY_SEARCH_TITLE_COLS: 'title',
     KEY_UPDATE_GENRES:        True,
     KEY_GENRES_COL:           '#extratags',
     KEY_GENRES_APPEND:        True,
@@ -110,6 +112,16 @@ class ConfigWidget(QWidget):
         self.custom_col_edit = QLineEdit(c.get(KEY_CUSTOM_COL_NAME, DEFAULT_STORE_VALUES[KEY_CUSTOM_COL_NAME]), self)
         self.custom_col_edit.setMaximumWidth(120)
         disc_layout.addWidget(self.custom_col_edit, 2, 1)
+
+        disc_layout.addWidget(QLabel('Search title columns:', self), 3, 0)
+        self.search_title_cols_edit = QLineEdit(
+            c.get(KEY_SEARCH_TITLE_COLS, DEFAULT_STORE_VALUES[KEY_SEARCH_TITLE_COLS]), self)
+        self.search_title_cols_edit.setPlaceholderText('#originaltitle, title')
+        self.search_title_cols_edit.setToolTip(
+            'Comma-separated list of columns to use for the search field.\n'
+            'Tries each in order; uses the first non-empty value.\n'
+            'Example: #originaltitle, title')
+        disc_layout.addWidget(self.search_title_cols_edit, 3, 1, 1, 2)
         disc_layout.setColumnStretch(2, 1)
 
         # --- Field Mapping ---
@@ -243,6 +255,7 @@ class ConfigWidget(QWidget):
             KEY_SCAN_COMMENTS:       self.scan_comments_cb.isChecked(),
             KEY_SCAN_CUSTOM_COL:     self.scan_custom_col_cb.isChecked(),
             KEY_CUSTOM_COL_NAME:     self.custom_col_edit.text().strip(),
+            KEY_SEARCH_TITLE_COLS:   self.search_title_cols_edit.text().strip(),
             KEY_UPDATE_GENRES:        self.update_genres_cb.isChecked(),
             KEY_GENRES_COL:           self.genres_col_edit.text().strip(),
             KEY_GENRES_APPEND:        self.genres_append_cb.isChecked(),

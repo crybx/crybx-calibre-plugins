@@ -88,6 +88,37 @@ def find_md_id(book_id, db, config):
     return None
 
 
+def get_search_title(book_id, db, config):
+    '''
+    Return the best title string for search, checking columns listed in
+    the KEY_SEARCH_TITLE_COLS config value (comma-separated, tried in order).
+    Falls back to the Calibre title or the book_id.
+    '''
+    cols_str = config.get(cfg.KEY_SEARCH_TITLE_COLS, 'title')
+    for col_name in cols_str.split(','):
+        col_name = col_name.strip()
+        if not col_name:
+            continue
+        try:
+            if col_name == 'title':
+                val = db.title(book_id, index_is_id=True)
+            elif col_name.startswith('#'):
+                if hasattr(db, 'new_api'):
+                    val = db.new_api.field_for(col_name, book_id)
+                else:
+                    val = db.get_custom(book_id, label=col_name.lstrip('#'), index_is_id=True)
+            else:
+                if hasattr(db, 'new_api'):
+                    val = db.new_api.field_for(col_name, book_id)
+                else:
+                    val = None
+            if val and str(val).strip():
+                return str(val).strip()
+        except Exception:
+            continue
+    return db.title(book_id, index_is_id=True) or str(book_id)
+
+
 class MangaDexAction(InterfaceAction):
 
     name = 'MangaDex'
@@ -129,7 +160,7 @@ class MangaDexAction(InterfaceAction):
         db = self.gui.current_db
         config = cfg.plugin_prefs[cfg.STORE_NAME]
 
-        books_data = [(bid, db.title(bid, index_is_id=True) or str(bid))
+        books_data = [(bid, get_search_title(bid, db, config))
                       for bid in book_ids]
 
         dlg = SearchLinkDialog(self.gui, books_data, config, db)
@@ -172,7 +203,7 @@ class MangaDexAction(InterfaceAction):
         # Discover MangaDex IDs for each selected book
         books_data = []
         for book_id in book_ids:
-            title = db.title(book_id, index_is_id=True) or str(book_id)
+            title = get_search_title(book_id, db, config)
             manga_id = find_md_id(book_id, db, config)
             books_data.append((book_id, title, manga_id))
 
@@ -186,7 +217,7 @@ class MangaDexAction(InterfaceAction):
             # Re-discover after linking
             books_data = []
             for book_id in book_ids:
-                title = db.title(book_id, index_is_id=True) or str(book_id)
+                title = get_search_title(book_id, db, config)
                 manga_id = find_md_id(book_id, db, config)
                 books_data.append((book_id, title, manga_id))
 

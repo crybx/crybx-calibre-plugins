@@ -73,6 +73,37 @@ def find_mu_url(book_id, db, config):
     return None
 
 
+def get_search_title(book_id, db, config):
+    '''
+    Return the best title string for search, checking columns listed in
+    the KEY_SEARCH_TITLE_COLS config value (comma-separated, tried in order).
+    Falls back to the Calibre title or the book_id.
+    '''
+    cols_str = config.get(cfg.KEY_SEARCH_TITLE_COLS, 'title')
+    for col_name in cols_str.split(','):
+        col_name = col_name.strip()
+        if not col_name:
+            continue
+        try:
+            if col_name == 'title':
+                val = db.title(book_id, index_is_id=True)
+            elif col_name.startswith('#'):
+                if hasattr(db, 'new_api'):
+                    val = db.new_api.field_for(col_name, book_id)
+                else:
+                    val = db.get_custom(book_id, label=col_name.lstrip('#'), index_is_id=True)
+            else:
+                if hasattr(db, 'new_api'):
+                    val = db.new_api.field_for(col_name, book_id)
+                else:
+                    val = None
+            if val and str(val).strip():
+                return str(val).strip()
+        except Exception:
+            continue
+    return db.title(book_id, index_is_id=True) or str(book_id)
+
+
 class MangaUpdatesAction(InterfaceAction):
 
     name = 'MangaUpdates'
@@ -116,7 +147,7 @@ class MangaUpdatesAction(InterfaceAction):
 
         books_data = []
         for book_id in book_ids:
-            title = db.title(book_id, index_is_id=True) or str(book_id)
+            title = get_search_title(book_id, db, config)
             books_data.append((book_id, title))
 
         dlg = SearchLinkDialog(self.gui, books_data, config, db)
@@ -159,7 +190,7 @@ class MangaUpdatesAction(InterfaceAction):
         # Discover MU URLs for each selected book
         books_data = []   # (book_id, title, mu_url_or_None)
         for book_id in book_ids:
-            title = db.title(book_id, index_is_id=True) or str(book_id)
+            title = get_search_title(book_id, db, config)
             mu_url = find_mu_url(book_id, db, config)
             books_data.append((book_id, title, mu_url))
 
@@ -175,7 +206,7 @@ class MangaUpdatesAction(InterfaceAction):
             # Re-discover URLs after linking
             books_data = []
             for book_id in book_ids:
-                title = db.title(book_id, index_is_id=True) or str(book_id)
+                title = get_search_title(book_id, db, config)
                 mu_url = find_mu_url(book_id, db, config)
                 books_data.append((book_id, title, mu_url))
 
