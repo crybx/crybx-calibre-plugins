@@ -41,6 +41,9 @@ KEY_ARTISTS_TO_AUTHORS    = 'artistsToAuthors'
 KEY_UPDATE_ARTISTS        = 'updateArtists'
 KEY_ARTISTS_COL           = 'artistsCol'
 KEY_ARTISTS_APPEND        = 'artistsAppend'
+KEY_UPDATE_ASSOC_NAMES    = 'updateAssocNames'
+KEY_ASSOC_NAMES_COL       = 'assocNamesCol'
+KEY_ASSOC_NAMES_APPEND    = 'assocNamesAppend'
 KEY_LINK_COL              = 'linkCol'
 KEY_USER_AGENT            = 'userAgent'
 
@@ -68,6 +71,9 @@ DEFAULT_STORE_VALUES = {
     KEY_UPDATE_ARTISTS:       False,
     KEY_ARTISTS_COL:          '',
     KEY_ARTISTS_APPEND:       False,
+    KEY_UPDATE_ASSOC_NAMES:   True,
+    KEY_ASSOC_NAMES_COL:      '',
+    KEY_ASSOC_NAMES_APPEND:   True,
     KEY_LINK_COL:             '#links',
 }
 
@@ -150,6 +156,19 @@ class ConfigWidget(QWidget):
         self.tags_append_cb = QCheckBox('Append (not replace)', self)
         self.tags_append_cb.setChecked(c.get(KEY_TAGS_APPEND, True))
         field_layout.addWidget(self.tags_append_cb, row, 2)
+        row += 1
+
+        # Associated Names (alt titles)
+        self.update_assoc_names_cb = QCheckBox('Assoc. Names \u2192', self)
+        self.update_assoc_names_cb.setChecked(c.get(KEY_UPDATE_ASSOC_NAMES, DEFAULT_STORE_VALUES[KEY_UPDATE_ASSOC_NAMES]))
+        field_layout.addWidget(self.update_assoc_names_cb, row, 0)
+        self.assoc_names_col_edit = QLineEdit(c.get(KEY_ASSOC_NAMES_COL, DEFAULT_STORE_VALUES[KEY_ASSOC_NAMES_COL]), self)
+        self.assoc_names_col_edit.setMaximumWidth(120)
+        self.assoc_names_col_edit.setPlaceholderText('(blank = skip)')
+        field_layout.addWidget(self.assoc_names_col_edit, row, 1)
+        self.assoc_names_append_cb = QCheckBox('Append (not replace)', self)
+        self.assoc_names_append_cb.setChecked(c.get(KEY_ASSOC_NAMES_APPEND, DEFAULT_STORE_VALUES[KEY_ASSOC_NAMES_APPEND]))
+        field_layout.addWidget(self.assoc_names_append_cb, row, 2)
         row += 1
 
         # Description
@@ -250,6 +269,9 @@ class ConfigWidget(QWidget):
             KEY_UPDATE_ARTISTS:       self.update_artists_cb.isChecked(),
             KEY_ARTISTS_COL:          self.artists_col_edit.text().strip(),
             KEY_ARTISTS_APPEND:       self.artists_append_cb.isChecked(),
+            KEY_UPDATE_ASSOC_NAMES:   self.update_assoc_names_cb.isChecked(),
+            KEY_ASSOC_NAMES_COL:      self.assoc_names_col_edit.text().strip(),
+            KEY_ASSOC_NAMES_APPEND:   self.assoc_names_append_cb.isChecked(),
             KEY_UPDATE_TITLE:         self.update_title_cb.isChecked(),
             KEY_UPDATE_ORIG_LANG:     self.update_orig_lang_cb.isChecked(),
             KEY_ORIG_LANG_COL:        self.orig_lang_col_edit.text().strip(),

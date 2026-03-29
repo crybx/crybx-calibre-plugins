@@ -399,6 +399,35 @@ class MangaDexAction(InterfaceAction):
                     artists_append = config.get(cfg.KEY_ARTISTS_APPEND, False)
                 _write_tags(db_api, book_id, artists_col, artists_append, data['artists'])
 
+        # Associated Names (alt titles)
+        assoc_col = config.get(cfg.KEY_ASSOC_NAMES_COL, '').strip()
+        if assoc_col and _apply(cfg.KEY_UPDATE_ASSOC_NAMES, True, 'assoc_names'):
+            names = data.get('alt_titles') or []
+            if overrides is not None:
+                selected = overrides.get('assoc_names_value', '').strip()
+            else:
+                selected = names[0].strip() if names else ''
+            if selected:
+                if overrides is not None:
+                    assoc_append = overrides.get('assoc_names_append',
+                                                 config.get(cfg.KEY_ASSOC_NAMES_APPEND, True))
+                else:
+                    assoc_append = config.get(cfg.KEY_ASSOC_NAMES_APPEND, True)
+                try:
+                    existing = db_api.field_for(assoc_col, book_id)
+                    if isinstance(existing, (list, tuple, frozenset)):
+                        ex_list = list(existing) if existing else []
+                        new_val = (ex_list + [selected] if selected not in ex_list
+                                   else ex_list) if assoc_append else [selected]
+                        db_api.set_field(assoc_col, {book_id: new_val})
+                    else:
+                        if assoc_append and existing:
+                            db_api.set_field(assoc_col, {book_id: existing + ', ' + selected})
+                        else:
+                            db_api.set_field(assoc_col, {book_id: selected})
+                except Exception as e:
+                    print('MangaDex: failed to set %s: %s' % (assoc_col, e))
+
         # Cover
         if overrides is not None:
             apply_cover = overrides.get('cover', False)

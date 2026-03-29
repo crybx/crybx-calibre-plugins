@@ -182,7 +182,8 @@ class BookDetailDialog(QDialog):
             KEY_UPDATE_GENRES, KEY_GENRES_COL, KEY_GENRES_APPEND,
             KEY_UPDATE_TAGS, KEY_TAGS_COL, KEY_TAGS_APPEND,
             KEY_UPDATE_ARTISTS, KEY_ARTISTS_COL, KEY_ARTISTS_APPEND,
-            KEY_ARTISTS_TO_AUTHORS)
+            KEY_ARTISTS_TO_AUTHORS,
+            KEY_UPDATE_ASSOC_NAMES, KEY_ASSOC_NAMES_COL, KEY_ASSOC_NAMES_APPEND)
 
         layout = QVBoxLayout(self)
         self.setLayout(layout)
@@ -317,6 +318,7 @@ class BookDetailDialog(QDialog):
 
         genres_col      = config.get(KEY_GENRES_COL,      '#extratags').strip()
         tags_col        = config.get(KEY_TAGS_COL,        '#extratags').strip()
+        assoc_names_col = config.get(KEY_ASSOC_NAMES_COL, '').strip()
         artists_col     = config.get(KEY_ARTISTS_COL,     '').strip()
 
         def _col_value(col):
@@ -332,8 +334,9 @@ class BookDetailDialog(QDialog):
             except Exception:
                 return ''
 
-        current_genres_val = _col_value(genres_col)
-        current_tags_val   = _col_value(tags_col)
+        current_genres_val      = _col_value(genres_col)
+        current_tags_val        = _col_value(tags_col)
+        current_assoc_names_val = _col_value(assoc_names_col)
 
         # Gather new values
         new_title        = data.get('title') or ''
@@ -354,6 +357,7 @@ class BookDetailDialog(QDialog):
         current_orig_lang_val = _col_value(orig_lang_col) if orig_lang_col else current_langs
         new_genres       = ', '.join(data.get('genres') or [])
         new_tags         = ', '.join(data.get('tags') or [])
+        alt_titles_list  = data.get('alt_titles') or []
 
         # Authors + Artists
         artists_to_authors = config.get(KEY_ARTISTS_TO_AUTHORS, True)
@@ -396,6 +400,11 @@ class BookDetailDialog(QDialog):
              current_tags_val, new_tags,
              bool(tags_col) and config.get(KEY_UPDATE_TAGS, True),
              'tags_append', config.get(KEY_TAGS_APPEND, True), None),
+            ('assoc_names', 'Assoc. Names', assoc_names_col or '(not set)',
+             current_assoc_names_val, '',
+             bool(assoc_names_col) and config.get(KEY_UPDATE_ASSOC_NAMES, True),
+             'assoc_names_append', config.get(KEY_ASSOC_NAMES_APPEND, True),
+             alt_titles_list),
             ('description', 'Description', 'comments',
              current_desc, new_desc,
              config.get(KEY_UPDATE_DESCRIPTION, True),
@@ -948,10 +957,12 @@ class SeriesPreviewDialog(QDialog):
         self._data = data
         self._cover_worker = None
         self._checkboxes = {}  # field_name -> QCheckBox
+        self._assoc_combo = None
 
         from calibre_plugins.mangadex.config import (
             KEY_GENRES_COL, KEY_TAGS_COL, KEY_ARTISTS_COL,
-            KEY_ARTISTS_TO_AUTHORS, KEY_ORIG_LANG_COL)
+            KEY_ARTISTS_TO_AUTHORS, KEY_ORIG_LANG_COL,
+            KEY_ASSOC_NAMES_COL)
         from calibre_plugins.mangadex.scraper import md_lang_to_calibre
         from calibre.utils.localization import calibre_langcode_to_name
 
@@ -1040,6 +1051,19 @@ class SeriesPreviewDialog(QDialog):
         _add_field('tags', 'Tags',
                    ', '.join(data.get('tags') or []))
 
+        alt_titles_list = data.get('alt_titles') or []
+        assoc_col = config.get(KEY_ASSOC_NAMES_COL, '').strip()
+        if alt_titles_list and assoc_col:
+            cb = QCheckBox('Assoc. Name \u2192 %s' % assoc_col, container)
+            cb.setChecked(True)
+            cb.setStyleSheet('font-weight: bold;')
+            self._checkboxes['assoc_names'] = cb
+            body.addWidget(cb)
+            self._assoc_combo = QComboBox(container)
+            for name in alt_titles_list:
+                self._assoc_combo.addItem(name)
+            body.addWidget(self._assoc_combo)
+
         desc_html = data.get('description') or ''
         if desc_html:
             desc_text = _strip_html(desc_html)
@@ -1085,6 +1109,8 @@ class SeriesPreviewDialog(QDialog):
         fields = {}
         for fname, cb in self._checkboxes.items():
             fields[fname] = cb.isChecked()
+        if self._assoc_combo is not None:
+            fields['assoc_names_value'] = self._assoc_combo.currentText()
         self._data['_apply_fields'] = fields
         self.accept()
 
