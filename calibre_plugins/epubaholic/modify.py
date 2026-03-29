@@ -218,6 +218,25 @@ class BookModifier(object):
         self._custom_metadata_updates['#originaltitle'] = title
         self.log('\t  Saved: %s' % title)
 
+    def _extract_ao3_url(self, container):
+        """Find an archiveofourown.org/works/ URL in the epub and store it for identifier update."""
+        self.log('\tLooking for AO3 URL in epub content')
+        import re
+        ao3_re = re.compile(r'https?://archiveofourown\.org/works/\d+')
+        for name in container.get_html_names():
+            html = container.get_raw(name)
+            match = ao3_re.search(html)
+            if match:
+                url = match.group(0)
+                self.log('\t  Found AO3 URL: %s' % url)
+                if not hasattr(self, '_custom_metadata_updates'):
+                    self._custom_metadata_updates = {}
+                if '_identifiers' not in self._custom_metadata_updates:
+                    self._custom_metadata_updates['_identifiers'] = {}
+                self._custom_metadata_updates['_identifiers']['uri'] = url
+                return
+        self.log('\t  No AO3 URL found')
+
     def _update_metadata_and_cover(self, epub_path):
         self.log('\tUpdating metadata and cover')
         # Populate our mi object with the cover data
@@ -241,6 +260,8 @@ class BookModifier(object):
             is_changed |= self._remove_files_if_exist(container, BOOKMARKS_FILES)
         if options['add_unmanifested_files']:
             is_changed |= self._process_unmanifested_files(container, add=True)
+        if options['extract_ao3_url']:
+            self._extract_ao3_url(container)
 
         # Imports if selected to be included in other changes
         if options['import_chapters'] and apply_changes_to_imports:
@@ -301,7 +322,7 @@ class BookModifier(object):
                 search_data = json.loads(meta_item.get('content'))['#value#']
                 self.log('\t  Metadata found in EPUB 2 format ', search_data)
 
-        if search_data == '':
+        if not search_data:
             return None
 
         return search_data.split(',')

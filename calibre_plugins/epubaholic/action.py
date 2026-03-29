@@ -131,29 +131,43 @@ class ModifyEpubAction(InterfaceAction):
                 self.gui.library_view.model().current_changed(current, QModelIndex())
 
     def _update_custom_columns(self, custom_metadata_updates):
-        """Update custom columns in Calibre's database"""
+        """Update custom columns and identifiers in Calibre's database"""
         db = self.gui.current_db
         db_ref = db.new_api if hasattr(db, 'new_api') else db
 
         # Group updates by column name
         col_name_books_map = {}
+        identifier_updates = {}  # book_id -> {id_type: value}
         book_ids_to_update = []
 
         for book_id, custom_metadata in custom_metadata_updates.items():
             if db_ref.has_id(book_id):
                 for col_name, value in custom_metadata.items():
+                    if col_name == '_identifiers':
+                        identifier_updates[book_id] = value
+                        if book_id not in book_ids_to_update:
+                            book_ids_to_update.append(book_id)
+                        continue
                     if col_name not in col_name_books_map:
                         col_name_books_map[col_name] = {}
                     col_name_books_map[col_name][book_id] = value
                     if book_id not in book_ids_to_update:
                         book_ids_to_update.append(book_id)
 
-        # Apply updates to database
+        # Apply custom column updates
         for col_name, book_values_map in col_name_books_map.items():
             try:
                 db_ref.set_field(col_name, book_values_map)
             except Exception as e:
                 print(f"Failed to update custom column {col_name}: {str(e)}")
+
+        # Apply identifier updates
+        for book_id, identifiers in identifier_updates.items():
+            for id_type, id_val in identifiers.items():
+                try:
+                    db.set_identifier(book_id, id_type, id_val)
+                except Exception as e:
+                    print(f"Failed to set identifier {id_type} for book {book_id}: {str(e)}")
 
         # Refresh the UI
         if book_ids_to_update:

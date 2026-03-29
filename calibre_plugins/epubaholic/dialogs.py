@@ -33,6 +33,7 @@ META_OPTIONS = [
     ('remove_calibre_bookmarks', 'Remove calibre bookmark files', 'Remove any bookmark files added by the calibre ebook viewer'),
     ('save_title_author_to_description', 'Save title and author to description', 'Prepend "title by author" to the top of the description field'),
     ('save_title_to_originaltitle', 'Save title to #originaltitle', 'Copy the current title to the #originaltitle custom column'),
+    ('extract_ao3_url', 'Extract AO3 URL to identifier', 'Find the archiveofourown.org/works/ link in the epub\nand save it as a uri: identifier'),
 ]
 
 TEXTREPLACE_OPTIONS = [
