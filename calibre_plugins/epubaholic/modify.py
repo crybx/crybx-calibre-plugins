@@ -89,14 +89,6 @@ class BookModifier(object):
             self._restore_metadata_from_opf(calibre_opf_path, cover_path)
             self._setup_user_options()
 
-            # Prepend title/author to description before metadata update
-            # so the epub also gets the updated description if both options are checked
-            if options['save_title_author_to_description']:
-                self._save_title_author_to_description()
-
-            if options['save_title_to_originaltitle']:
-                self._save_title_to_originaltitle()
-
             # If the user is updating metadata, we need to do this as a separate
             # step at the start, because it takes a stream object as input so is
             # run before we have written any container changes to disk below.
@@ -173,51 +165,6 @@ class BookModifier(object):
         # functions such as replacing the cover image.
         self.cover_path = cover_path
 
-    def _save_title_author_to_description(self):
-        """Prepend 'title by author' to the description/comments field"""
-        self.log('\tSaving title and author to description')
-
-        if not hasattr(self, 'mi') or not self.mi:
-            self.log('\t  No metadata object available')
-            return
-
-        from calibre.ebooks.metadata import authors_to_string
-
-        title = self.mi.title or ''
-        authors = authors_to_string(self.mi.authors) if self.mi.authors else ''
-
-        if not title:
-            self.log('\t  No title found')
-            return
-
-        header = '%s by %s' % (title, authors) if authors else title
-        existing = self.mi.comments or ''
-        new_comments = '<p>%s</p>\n%s' % (header, existing)
-        self.mi.comments = new_comments
-
-        if not hasattr(self, '_custom_metadata_updates'):
-            self._custom_metadata_updates = {}
-        self._custom_metadata_updates['comments'] = new_comments
-        self.log('\t  Added: %s' % header)
-
-    def _save_title_to_originaltitle(self):
-        """Copy the current title to the #originaltitle custom column"""
-        self.log('\tSaving title to #originaltitle')
-
-        if not hasattr(self, 'mi') or not self.mi:
-            self.log('\t  No metadata object available')
-            return
-
-        title = self.mi.title or ''
-        if not title:
-            self.log('\t  No title found')
-            return
-
-        if not hasattr(self, '_custom_metadata_updates'):
-            self._custom_metadata_updates = {}
-        self._custom_metadata_updates['#originaltitle'] = title
-        self.log('\t  Saved: %s' % title)
-
     def _extract_ao3_url(self, container):
         """Find an archiveofourown.org/works/ URL in the epub and store it for identifier update."""
         self.log('\tLooking for AO3 URL in epub content')
@@ -270,6 +217,8 @@ class BookModifier(object):
         # HTML AND CSS CHANGES
         if options['lily_junk_cleanup']:
             is_changed |= self._lily_junk_cleanup(container)
+        if options['cherrymist_loading']:
+            self._find_cherrymist_loading(container)
         if options['inline_styles_to_tags']:
             is_changed |= self._inline_styles_to_tags(container)
         if options['strip_leftover_styles']:
@@ -776,16 +725,46 @@ class BookModifier(object):
                 container.set(name, html)
                 self.log('\t  Cleaned up junk HTML in:', name)
 
-        # Set #readlocation with file numbers containing &amp;
+        # Append to #readlocation with file numbers containing &amp;
         if amp_file_numbers:
             amp_file_numbers = sorted(set(amp_file_numbers))
             rpl_value = 'rpl ' + ','.join(str(n) for n in amp_file_numbers)
             self.log('\t  Files with &amp;: %s' % rpl_value)
             if not hasattr(self, '_custom_metadata_updates'):
                 self._custom_metadata_updates = {}
+            existing = self._get_custom_column_value(container, '#readlocation')
+            if existing:
+                rpl_value = str(existing).rstrip() + ' ' + rpl_value
             self._custom_metadata_updates['#readlocation'] = rpl_value
 
         return dirtied
+
+    def _find_cherrymist_loading(self, container):
+        self.log('\tFinding cherrymist loading pages')
+        loading_file_numbers = []
+
+        for name in container.get_html_names():
+            raw = container.get_raw(name)
+            if len(raw) >= 1024:
+                continue
+            content = raw.decode('utf-8', errors='replace') if isinstance(raw, bytes) else raw
+            if '<svg' in content and 'Loading...</div>' in content:
+                basename = name.rsplit('/', 1)[-1] if '/' in name else name
+                num_match = re.search(r'_(\d+)_', basename)
+                if num_match:
+                    loading_file_numbers.append(int(num_match.group(1)))
+                    self.log('\t  Loading page:', name)
+
+        if loading_file_numbers:
+            loading_file_numbers = sorted(set(loading_file_numbers))
+            loading_value = 'loading ' + ','.join(str(n) for n in loading_file_numbers)
+            self.log('\t  %s' % loading_value)
+            if not hasattr(self, '_custom_metadata_updates'):
+                self._custom_metadata_updates = {}
+            existing = self._get_custom_column_value(container, '#readlocation')
+            if existing:
+                loading_value = str(existing).rstrip() + ' ' + loading_value
+            self._custom_metadata_updates['#readlocation'] = loading_value
 
     def _smarten_punctuation(self, container):
         from calibre.ebooks.conversion.preprocess import smarten_punctuation

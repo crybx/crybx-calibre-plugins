@@ -3,25 +3,24 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 __license__   = 'GPL v3'
 __copyright__ = '2011, Grant Drake'
 
-import os
+import os, traceback
 try:
-    from qt.core import QUrl, QModelIndex
+    from qt.core import QUrl, QModelIndex, QMenu, QToolButton, QFileDialog
 except ImportError:
-    from PyQt5.Qt import QUrl, QModelIndex
+    from PyQt5.Qt import QUrl, QModelIndex, QMenu, QToolButton, QFileDialog
 
 from calibre.gui2 import error_dialog
 from calibre.gui2.actions import InterfaceAction
-from calibre.ptempfile import PersistentTemporaryDirectory, remove_dir
+from calibre.ptempfile import PersistentTemporaryDirectory, PersistentTemporaryFile, remove_dir
 
 import calibre_plugins.epubaholic.config as cfg
 from calibre_plugins.epubaholic import ActionModifyEpub
 from calibre_plugins.epubaholic.common_icons import set_plugin_icon_resources, get_icon
+from calibre_plugins.epubaholic.common_menus import create_menu_action_unique
 from calibre_plugins.epubaholic.dialogs import (ModifyEpubDialog, QueueProgressDialog,
                                                  AddBooksProgressDialog)
 
 PLUGIN_ICONS = ['images/epubaholic_book.png']
-
-HELP_URL = 'https://github.com/kiwidude68/calibre_plugins/wiki/Modify-epub'
 
 class ModifyEpubAction(InterfaceAction):
 
@@ -29,12 +28,161 @@ class ModifyEpubAction(InterfaceAction):
     # Create our top-level menu/toolbar action (text, icon_path, tooltip, keyboard shortcut)
     action_spec = ('Epubaholic', None, 'Modify the contents of an epub without a conversion', ())
     action_type = 'current'
+    popup_type = QToolButton.MenuButtonPopup
 
     def genesis(self):
         icon_resources = self.load_resources(PLUGIN_ICONS)
         set_plugin_icon_resources(self.name, icon_resources)
         self.qaction.setIcon(get_icon(PLUGIN_ICONS[0]))
         self.qaction.triggered.connect(self.modify_epub)
+
+        self.menu = QMenu(self.gui)
+        self.qaction.setMenu(self.menu)
+
+        create_menu_action_unique(self, self.menu, 'Modify selected epubs',
+                                  PLUGIN_ICONS[0], triggered=self.modify_epub)
+        create_menu_action_unique(self, self.menu, 'Create epub from folder of HTML files\u2026',
+                                  PLUGIN_ICONS[0], triggered=self.create_epub_from_folder)
+        self.menu.addSeparator()
+        create_menu_action_unique(self, self.menu, 'Customize plugin\u2026',
+                                  'config.png', shortcut=False,
+                                  triggered=self.show_configuration)
+        self.gui.keyboard.finalize()
+
+    def show_configuration(self):
+        self.interface_action_base_plugin.do_user_config(self.gui)
+
+    def create_epub_from_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self.gui, 'Select folder containing HTML files')
+        if not folder:
+            return
+
+        html_extensions = ('.html', '.htm', '.xhtml')
+        html_files = sorted(
+            [f for f in os.listdir(folder) if f.lower().endswith(html_extensions)],
+            key=lambda fn: int(''.join(c for c in fn if c.isdigit()) or '0')
+        )
+
+        if not html_files:
+            return error_dialog(self.gui, 'No HTML files found',
+                'The selected folder contains no HTML files.', show=True)
+
+        title = os.path.basename(folder)
+
+        temp_epub = PersistentTemporaryFile(suffix='.epub')
+        temp_epub.close()
+
+        try:
+            self._build_epub_from_html_files(folder, temp_epub.name, title, html_files)
+        except Exception as e:
+            os.remove(temp_epub.name)
+            return error_dialog(self.gui, 'Failed to create EPUB',
+                'Error creating EPUB: %s' % str(e), show=True,
+                det_msg=traceback.format_exc())
+
+        from calibre.ebooks.metadata.book.base import Metadata
+        mi = Metadata(title, ['Unknown'])
+        db = self.gui.current_db
+        book_id = db.import_book(mi, [temp_epub.name])
+        os.remove(temp_epub.name)
+
+        self.gui.library_view.model().books_added(1)
+        self.gui.library_view.select_rows([book_id])
+        self.gui.tags_view.recount()
+
+        # Open Edit Metadata dialog for the new book
+        self.gui.iactions['Edit Metadata'].edit_metadata(False)
+
+    def _build_epub_from_html_files(self, folder_path, output_path, title, html_files):
+        from lxml import etree
+        from calibre.ebooks.metadata.book.base import Metadata
+        from calibre.ebooks.metadata.opf2 import metadata_to_opf
+        from calibre.ebooks.oeb.polish.container import OPF_NAMESPACES
+        from calibre.ebooks.oeb.polish.toc import TOC, create_ncx
+        from calibre.ebooks.oeb.polish.utils import guess_type
+        from calibre.ebooks.oeb.polish.pretty import pretty_xml_tree
+        from calibre.utils.zipfile import ZipFile, ZIP_DEFLATED, ZIP_STORED
+        from calibre.utils.localization import lang_as_iso639_1
+
+        mi = Metadata(title, ['Unknown'])
+        opf = metadata_to_opf(mi, as_string=False)
+
+        lang = 'und'
+        for l in opf.xpath('//*[local-name()="language"]'):
+            if l.text:
+                lang = l.text
+                break
+        lang = lang_as_iso639_1(lang) or lang
+
+        opfns = OPF_NAMESPACES['opf']
+
+        # Build manifest
+        manifest = opf.makeelement(f'{{{opfns}}}manifest')
+        opf.insert(1, manifest)
+
+        ncx_item = manifest.makeelement(f'{{{opfns}}}item', href='toc.ncx', id='ncx')
+        ncx_item.set('media-type', guess_type('toc.ncx'))
+        manifest.append(ncx_item)
+
+        # Add stylesheet to manifest
+        stylesheet = cfg.plugin_prefs[cfg.STORE_NAME].get(
+            cfg.KEY_CREATE_EPUB_STYLESHEET, cfg.DEFAULT_CREATE_EPUB_STYLESHEET)
+        css_item = manifest.makeelement(f'{{{opfns}}}item', href='styles/stylesheet.css', id='stylesheet')
+        css_item.set('media-type', 'text/css')
+        manifest.append(css_item)
+
+        # Build spine
+        spine = opf.makeelement(f'{{{opfns}}}spine', toc='ncx')
+        opf.insert(2, spine)
+
+        # Add each HTML file to manifest, spine, and TOC
+        toc = TOC()
+        for i, html_file in enumerate(html_files):
+            file_id = 'chapter_%d' % i
+            href = 'text/%s' % html_file
+
+            item = manifest.makeelement(f'{{{opfns}}}item', href=href, id=file_id)
+            item.set('media-type', guess_type('a.xhtml'))
+            manifest.append(item)
+
+            itemref = spine.makeelement(f'{{{opfns}}}itemref', idref=file_id)
+            spine.append(itemref)
+
+            toc_title = os.path.splitext(html_file)[0]
+            toc.add(toc_title, href)
+
+        # Build NCX
+        uuid = ''
+        for u in opf.xpath('//*[@id="uuid_id"]'):
+            uuid = u.text
+        ncx = create_ncx(toc, lambda x: x, title, lang, uuid)
+
+        # Serialize XML
+        pretty_xml_tree(opf)
+        opf_bytes = etree.tostring(opf, encoding='utf-8', xml_declaration=True, pretty_print=True)
+        ncx_bytes = etree.tostring(ncx, encoding='utf-8', xml_declaration=True, pretty_print=True)
+
+        container_xml = (
+            '<?xml version="1.0"?>\n'
+            '<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">\n'
+            '   <rootfiles>\n'
+            '      <rootfile full-path="EPUB/content.opf"'
+            ' media-type="application/oebps-package+xml"/>\n'
+            '   </rootfiles>\n'
+            '</container>'
+        ).encode('utf-8')
+
+        # Write EPUB zip
+        with ZipFile(output_path, 'w', compression=ZIP_DEFLATED) as zf:
+            zf.writestr('mimetype', b'application/epub+zip', compression=ZIP_STORED)
+            zf.writestr('META-INF/container.xml', container_xml)
+            zf.writestr('EPUB/content.opf', opf_bytes)
+            zf.writestr('EPUB/toc.ncx', ncx_bytes)
+            zf.writestr('EPUB/styles/stylesheet.css', stylesheet.encode('utf-8'))
+            for html_file in html_files:
+                file_path = os.path.join(folder_path, html_file)
+                zf.write(file_path, 'EPUB/text/%s' % html_file)
 
     def modify_epub(self):
         rows = self.gui.library_view.selectionModel().selectedRows()

@@ -31,8 +31,6 @@ META_OPTIONS = [
     ('update_metadata', 'Update metadata', 'Update the manifest with the latest calibre metadata\nand replace an existing identifiable cover if possible.'),
     ('add_unmanifested_files', 'Add unmanifested files to manifest', 'Add files to manifest that are in the epub but do not exist in the .opf manifest\n(excluding iTunes/calibre bookmarks)'),
     ('remove_calibre_bookmarks', 'Remove calibre bookmark files', 'Remove any bookmark files added by the calibre ebook viewer'),
-    ('save_title_author_to_description', 'Save title and author to description', 'Prepend "title by author" to the top of the description field'),
-    ('save_title_to_originaltitle', 'Save title to #originaltitle', 'Copy the current title to the #originaltitle custom column'),
     ('extract_ao3_url', 'Extract AO3 URL to identifier', 'Find the archiveofourown.org/works/ link in the epub\nand save it as a uri: identifier'),
 ]
 
@@ -50,6 +48,7 @@ STYLE_OPTIONS = [
     ('strip_leftover_styles', 'Strip leftover styles', 'Remove styles leftover after replacing inline css styles with tags'),
     ('strip_spans', 'Strip spans', 'Remove spans without attributes'),
     ('lily_junk_cleanup', 'Lily junk cleanup', 'Remove Lily HTML junk'),
+    ('cherrymist_loading', 'Find cherrymist loading pages', 'Mark loading placeholder pages in #readlocation'),
 ]
 
 IMPORT_OPTIONS = [
@@ -76,13 +75,6 @@ class ModifyEpubDialog(SizePersistedDialog):
         self.setLayout(layout)
         title_layout = ImageTitleLayout(self, 'images/epubaholic_book.png', 'Epubaholic Options')
         layout.addLayout(title_layout)
-
-        # Add hyperlink to a help file at the right. We will replace the correct name when it is clicked.
-        help_label = QLabel('<a href="' + cfg.HELP_URL + '">Help</a>', self)
-        help_label.setTextInteractionFlags(Qt.LinksAccessibleByMouse | Qt.LinksAccessibleByKeyboard)
-        help_label.setAlignment(Qt.AlignRight)
-        help_label.linkActivated.connect(cfg.show_help)
-        title_layout.addWidget(help_label)
 
         # Make dialog scrollable for smaller screens
         scrollable = QScrollArea()
