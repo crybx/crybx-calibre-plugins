@@ -5,7 +5,7 @@ __license__   = 'GPL v3'
 from calibre.customize import InterfaceActionBase
 
 class ActionLinkManager(InterfaceActionBase):
-    name                    = 'Link Manager'
+    name                    = 'LinkManager'
     description             = 'Manage markdown links in a custom column'
     supported_platforms     = ['windows', 'osx', 'linux']
     author                  = 'crybx'
