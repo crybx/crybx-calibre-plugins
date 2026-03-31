@@ -767,16 +767,30 @@ class BookModifier(object):
             self._custom_metadata_updates['#readlocation'] = loading_value
 
     def _smarten_punctuation(self, container):
-        from calibre.ebooks.conversion.preprocess import smarten_punctuation
+        from calibre.ebooks.conversion.utils import HeuristicProcessor
+        from calibre.utils.smartypants import smartyPants
+        from calibre import xml_replace_entities
+        from uuid import uuid4
         dirtied = False
         self.log('\tApplying smarten punctuation')
         if container.is_drm_encrypted():
             self.log('ERROR - cannot smarten punctuation in DRM encrypted book')
             return False
 
+        preprocessor = HeuristicProcessor(log=container.log)
         for name in container.get_html_names():
             html = container.get_raw(name)
-            new_html = smarten_punctuation(html, container.log)
+            # Protect HTML comments from dash conversion
+            start = 'calibre-smartypants-'+str(uuid4())
+            stop = 'calibre-smartypants-'+str(uuid4())
+            new_html = html.replace('<!--', start)
+            new_html = new_html.replace('-->', stop)
+            new_html = preprocessor.fix_nbsp_indents(new_html)
+            # 'qbe' = quotes + backtick quotes + ellipses (no dash conversion)
+            new_html = smartyPants(new_html, attr='qbe')
+            new_html = new_html.replace(start, '<!--')
+            new_html = new_html.replace(stop, '-->')
+            new_html = xml_replace_entities(new_html)
             if html != new_html:
                 dirtied = True
                 new_html = strip_encoding_declarations(new_html)
