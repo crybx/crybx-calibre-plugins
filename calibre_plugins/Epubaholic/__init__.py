@@ -17,7 +17,7 @@ class ActionModifyEpub(InterfaceActionBase):
     calibre utilities to run without needing to load the GUI libraries.
     '''
     name                    = 'Epubaholic'
-    description             = 'Apply custom text transformations and cleanup actions to an epub without doing a conversion'
+    description             = 'Build EPUBs from HTML files, or apply text transformations and cleanup to existing EPUBs without a full conversion'
     supported_platforms     = ['windows', 'osx', 'linux']
     author                  = 'crybx'
     version                 = (1, 0, 0)
