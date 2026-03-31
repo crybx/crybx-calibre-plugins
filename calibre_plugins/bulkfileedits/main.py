@@ -658,6 +658,85 @@ class RenameReplaceTool(Tool):
         return renamed, skipped, failed, '\n'.join(details_lines)
 
 
+class InsertHeaderFromFilenameTool(Tool):
+
+    name = 'insert-header-from-filename'
+    allowed_in_toolbar = False
+    allowed_in_menu = True
+
+    def create_action(self, for_toolbar=True):
+        ac = QAction('Insert filename as header', self.gui)
+        if not for_toolbar:
+            self.register_shortcut(ac, 'insert-header-from-filename-tool', default_keys=())
+        ac.triggered.connect(self.run)
+        return ac
+
+    def run(self):
+        selected = self.gui.file_list.file_list.selected_names
+        if not selected:
+            info_dialog(self.gui, 'Insert header',
+                'No files selected. Select files in the File browser first.', show=True)
+            return
+
+        container = self.current_container
+        doc_names = [n for n in selected if container.mime_map.get(n) in OEB_DOCS]
+        if not doc_names:
+            info_dialog(self.gui, 'Insert header',
+                'No HTML/XHTML files in selection.', show=True)
+            return
+
+        self.boss.commit_all_editors_to_container()
+        try:
+            modified, skipped, details = self.insert_headers(doc_names)
+        except Exception:
+            import traceback
+            error_dialog(self.gui, 'Failed to insert headers',
+                'Failed to insert headers, click "Show details" for more info',
+                det_msg=traceback.format_exc(), show=True)
+            self.boss.revert_requested(self.boss.global_undo.previous_container)
+            return
+
+        if modified > 0:
+            self.boss.show_current_diff()
+            self.boss.apply_container_update_to_gui()
+            return
+
+        summary = '%d modified, %d skipped' % (modified, skipped)
+        info_dialog(self.gui, 'Insert header', summary,
+            det_msg=details if details else None, show=True)
+
+    def insert_headers(self, doc_names):
+        self.boss.add_savepoint('Before: Insert header based on filename')
+        container = self.current_container
+
+        modified = 0
+        skipped = 0
+        details_lines = []
+
+        for name in sorted(doc_names):
+            basename = name.rsplit('/', 1)[-1] if '/' in name else name
+            chapter_name = basename.rsplit('.', 1)[0] if '.' in basename else basename
+
+            text = container.raw_data(name, decode=True)
+            body_match = re.search(r'(<body[^>]*>)', text, re.IGNORECASE)
+            if not body_match:
+                details_lines.append('  SKIP (no <body>): %s' % basename)
+                skipped += 1
+                continue
+
+            insert_pos = body_match.end()
+            h1_tag = '<h1>%s</h1>' % chapter_name
+            new_text = text[:insert_pos] + '\n' + h1_tag + text[insert_pos:]
+
+            with container.open(name, 'wb') as f:
+                f.write(new_text.encode('utf-8'))
+            details_lines.append('  Inserted:  %s  ->  %s' % (basename, h1_tag))
+            modified += 1
+
+        details_lines.append('  --- %d modified, %d skipped' % (modified, skipped))
+        return modified, skipped, '\n'.join(details_lines)
+
+
 class DeleteMatchingFilesTool(Tool):
 
     name = 'delete-matching-files'
