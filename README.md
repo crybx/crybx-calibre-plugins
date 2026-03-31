@@ -27,8 +27,7 @@ Each plugin has a `.build/` directory with build scripts:
 
 ```bash
 cd calibre_plugins/<PluginName>/.build
-bash build.sh    # Linux / MSYS2 / Git Bash
-build.cmd        # Windows cmd
+bash build.sh
 ```
 
 Built zips are placed in `calibre_plugins/installs/`. Install via Calibre's Preferences > Plugins > Load plugin from file.
