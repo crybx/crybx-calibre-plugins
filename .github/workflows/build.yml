@@ -1,0 +1,39 @@
+name: Build Plugins
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Build all plugins
+        run: |
+          for dir in calibre_plugins/*/; do
+            if [ -f "$dir/.build/build.sh" ]; then
+              echo "=== Building $(basename $dir) ==="
+              bash "$dir/.build/build.sh"
+            fi
+          done
+
+      - name: Create release
+        run: |
+          gh release create "${{ inputs.tag }}" \
+            calibre_plugins/installs/*.zip \
+            --title "${{ inputs.tag }}" \
+            --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
