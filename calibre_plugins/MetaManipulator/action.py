@@ -1,8 +1,10 @@
-from qt.core import QIcon, QMenu, QModelIndex, QPixmap
+from qt.core import QIcon, QMenu, QModelIndex, QPixmap, QToolButton
 
 from calibre.ebooks.metadata import authors_to_string
 from calibre.gui2 import error_dialog, info_dialog
 from calibre.gui2.actions import InterfaceAction
+
+from calibre_plugins.metamanipulator.dialogs import MetaManipulatorDialog
 
 ICON = 'images/metamanipulator.png'
 
@@ -12,23 +14,51 @@ class MetaManipulatorAction(InterfaceAction):
     name = 'MetaManipulator'
     action_spec = ('MetaManipulator', None, 'Bulk metadata manipulation', ())
     action_type = 'current'
+    popup_type = QToolButton.MenuButtonPopup
 
     def genesis(self):
-        icon_data = self.load_resources([ICON]).get(ICON)
-        if icon_data:
+        self.icon_data = self.load_resources([ICON]).get(ICON)
+        if self.icon_data:
             pm = QPixmap()
-            pm.loadFromData(icon_data)
+            pm.loadFromData(self.icon_data)
             self.qaction.setIcon(QIcon(pm))
+        self.qaction.triggered.connect(self._show_dialog)
         self.menu = QMenu(self.gui)
         self.qaction.setMenu(self.menu)
         self._create_menu()
 
     def _create_menu(self):
         self.menu.clear()
+        self.menu.addAction('Select operations\u2026', self._show_dialog)
+        self.menu.addSeparator()
         self.menu.addAction('Save title and author to description',
             self._save_title_author_to_description)
         self.menu.addAction('Save title to #originaltitle',
             self._save_title_to_originaltitle)
+
+    def _show_dialog(self):
+        book_ids = self._get_selected_ids()
+        if not book_ids:
+            return
+
+        dlg = MetaManipulatorDialog(self.gui, self.icon_data)
+        if dlg.exec_() != dlg.Accepted:
+            return
+
+        options = dlg.options
+        db = self.gui.current_db.new_api
+        count = 0
+
+        if options.get('save_title_author_to_description'):
+            count += self._do_save_title_author_to_description(db, book_ids)
+
+        if options.get('save_title_to_originaltitle'):
+            count += self._do_save_title_to_originaltitle(db, book_ids)
+
+        self._refresh_ui(book_ids)
+        info_dialog(self.gui, 'MetaManipulator',
+            'Completed %d operation(s) across %d book(s).' % (count, len(book_ids)),
+            show=True)
 
     def _get_selected_ids(self):
         rows = self.gui.library_view.selectionModel().selectedRows()
@@ -44,14 +74,8 @@ class MetaManipulatorAction(InterfaceAction):
         if current.isValid():
             self.gui.library_view.model().current_changed(current, QModelIndex())
 
-    def _save_title_author_to_description(self):
-        book_ids = self._get_selected_ids()
-        if not book_ids:
-            return
-
-        db = self.gui.current_db.new_api
+    def _do_save_title_author_to_description(self, db, book_ids):
         count = 0
-
         for book_id in book_ids:
             mi = db.get_metadata(book_id)
             title = mi.title or ''
@@ -65,19 +89,10 @@ class MetaManipulatorAction(InterfaceAction):
             new_comments = '<p>%s</p>\n%s' % (header, existing)
             db.set_field('comments', {book_id: new_comments})
             count += 1
+        return count
 
-        self._refresh_ui(book_ids)
-        info_dialog(self.gui, 'MetaManipulator',
-            'Updated description for %d book(s).' % count, show=True)
-
-    def _save_title_to_originaltitle(self):
-        book_ids = self._get_selected_ids()
-        if not book_ids:
-            return
-
-        db = self.gui.current_db.new_api
+    def _do_save_title_to_originaltitle(self, db, book_ids):
         updates = {}
-
         for book_id in book_ids:
             mi = db.get_metadata(book_id)
             title = mi.title or ''
@@ -90,8 +105,26 @@ class MetaManipulatorAction(InterfaceAction):
             except Exception as e:
                 error_dialog(self.gui, 'MetaManipulator',
                     'Failed to update #originaltitle: %s' % str(e), show=True)
-                return
+                return 0
+        return len(updates)
 
+    # Direct menu actions (bypass dialog)
+    def _save_title_author_to_description(self):
+        book_ids = self._get_selected_ids()
+        if not book_ids:
+            return
+        db = self.gui.current_db.new_api
+        count = self._do_save_title_author_to_description(db, book_ids)
         self._refresh_ui(book_ids)
         info_dialog(self.gui, 'MetaManipulator',
-            'Saved title to #originaltitle for %d book(s).' % len(updates), show=True)
+            'Updated description for %d book(s).' % count, show=True)
+
+    def _save_title_to_originaltitle(self):
+        book_ids = self._get_selected_ids()
+        if not book_ids:
+            return
+        db = self.gui.current_db.new_api
+        count = self._do_save_title_to_originaltitle(db, book_ids)
+        self._refresh_ui(book_ids)
+        info_dialog(self.gui, 'MetaManipulator',
+            'Saved title to #originaltitle for %d book(s).' % count, show=True)
