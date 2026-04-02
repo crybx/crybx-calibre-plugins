@@ -5,9 +5,11 @@ __copyright__ = '2011, Grant Drake'
 
 import os, traceback
 try:
-    from qt.core import QUrl, QModelIndex, QMenu, QToolButton, QFileDialog
+    from qt.core import (QUrl, QModelIndex, QMenu, QToolButton, QFileDialog,
+                         QListView, QTreeView, QAbstractItemView)
 except ImportError:
-    from PyQt5.Qt import QUrl, QModelIndex, QMenu, QToolButton, QFileDialog
+    from PyQt5.Qt import (QUrl, QModelIndex, QMenu, QToolButton, QFileDialog,
+                          QListView, QTreeView, QAbstractItemView)
 
 from calibre.gui2 import error_dialog
 from calibre.gui2.actions import InterfaceAction
@@ -41,7 +43,7 @@ class ModifyEpubAction(InterfaceAction):
 
         create_menu_action_unique(self, self.menu, 'Modify selected epubs',
                                   PLUGIN_ICONS[0], triggered=self.modify_epub)
-        create_menu_action_unique(self, self.menu, 'Create epub from folder of HTML files\u2026',
+        create_menu_action_unique(self, self.menu, 'Create epub(s) from folder(s) of HTML files\u2026',
                                   PLUGIN_ICONS[0], triggered=self.create_epub_from_folder)
         self.menu.addSeparator()
         create_menu_action_unique(self, self.menu, 'Customize plugin\u2026',
@@ -53,46 +55,63 @@ class ModifyEpubAction(InterfaceAction):
         self.interface_action_base_plugin.do_user_config(self.gui)
 
     def create_epub_from_folder(self):
-        folder = QFileDialog.getExistingDirectory(
-            self.gui, 'Select folder containing HTML files')
-        if not folder:
+        from calibre.utils.config import dynamic
+        PREF_KEY = 'epubaholic_create_epub_last_dir'
+        initial_dir = dynamic.get(PREF_KEY, os.path.expanduser('~'))
+        if not os.path.isdir(initial_dir):
+            initial_dir = os.path.expanduser('~')
+
+        dialog = QFileDialog(self.gui, 'Select one or more folders containing HTML files')
+        dialog.setDirectory(initial_dir)
+        dialog.setFileMode(QFileDialog.FileMode.Directory)
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dialog.setOption(QFileDialog.Option.ShowDirsOnly, True)
+        for view in dialog.findChildren(QListView):
+            view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        for view in dialog.findChildren(QTreeView):
+            view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        if not dialog.exec_():
+            return
+        folders = dialog.selectedFiles()
+        if not folders:
             return
 
+        # Remember parent of selected folders for next time
+        dynamic.set(PREF_KEY, os.path.dirname(folders[0]))
+
         html_extensions = ('.html', '.htm', '.xhtml')
-        html_files = sorted(
-            [f for f in os.listdir(folder) if f.lower().endswith(html_extensions)],
-            key=lambda fn: int(''.join(c for c in fn if c.isdigit()) or '0')
-        )
 
-        if not html_files:
-            return error_dialog(self.gui, 'No HTML files found',
-                'The selected folder contains no HTML files.', show=True)
+        for folder in folders:
+            html_files = sorted(
+                [f for f in os.listdir(folder) if f.lower().endswith(html_extensions)],
+                key=lambda fn: int(''.join(c for c in fn if c.isdigit()) or '0')
+            )
+            title = os.path.basename(folder)
 
-        title = os.path.basename(folder)
+            temp_epub = PersistentTemporaryFile(suffix='.epub')
+            temp_epub.close()
 
-        temp_epub = PersistentTemporaryFile(suffix='.epub')
-        temp_epub.close()
+            try:
+                self._build_epub_from_html_files(folder, temp_epub.name, title, html_files)
+            except Exception as e:
+                os.remove(temp_epub.name)
+                error_dialog(self.gui, 'Failed to create EPUB',
+                    'Error creating EPUB from "%s": %s' % (title, str(e)),
+                    show=True, det_msg=traceback.format_exc())
+                continue
 
-        try:
-            self._build_epub_from_html_files(folder, temp_epub.name, title, html_files)
-        except Exception as e:
+            from calibre.ebooks.metadata.book.base import Metadata
+            mi = Metadata(title, ['Unknown'])
+            db = self.gui.current_db
+            book_id = db.import_book(mi, [temp_epub.name])
             os.remove(temp_epub.name)
-            return error_dialog(self.gui, 'Failed to create EPUB',
-                'Error creating EPUB: %s' % str(e), show=True,
-                det_msg=traceback.format_exc())
 
-        from calibre.ebooks.metadata.book.base import Metadata
-        mi = Metadata(title, ['Unknown'])
-        db = self.gui.current_db
-        book_id = db.import_book(mi, [temp_epub.name])
-        os.remove(temp_epub.name)
+            self.gui.library_view.model().books_added(1)
+            self.gui.library_view.select_rows([book_id])
+            self.gui.tags_view.recount()
 
-        self.gui.library_view.model().books_added(1)
-        self.gui.library_view.select_rows([book_id])
-        self.gui.tags_view.recount()
-
-        # Open Edit Metadata dialog for the new book
-        self.gui.iactions['Edit Metadata'].edit_metadata(False)
+            # Open Edit Metadata dialog for the new book (modal — blocks until closed)
+            self.gui.iactions['Edit Metadata'].edit_metadata(False)
 
     def _build_epub_from_html_files(self, folder_path, output_path, title, html_files):
         from lxml import etree
