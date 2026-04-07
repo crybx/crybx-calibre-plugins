@@ -3,7 +3,7 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 __license__   = 'GPL v3'
 __copyright__ = '2011, Grant Drake'
 
-import os, traceback
+import os, shutil, traceback
 try:
     from qt.core import (QUrl, QModelIndex, QMenu, QToolButton, QFileDialog,
                          QListView, QTreeView, QAbstractItemView)
@@ -112,6 +112,42 @@ class ModifyEpubAction(InterfaceAction):
 
             # Open Edit Metadata dialog for the new book (modal — blocks until closed)
             self.gui.iactions['Edit Metadata'].edit_metadata(False)
+
+            # Move the source folder into the configured added-chapters directory
+            self._archive_source_folder(folder)
+
+    def _archive_source_folder(self, folder):
+        '''
+        Move a processed source folder into the configured added-chapters
+        directory so it doesn't get re-imported on the next run. Silently
+        skips if the destination is unconfigured or unreachable; surfaces
+        per-folder failures via an error dialog without aborting the loop.
+        '''
+        added_root = cfg.plugin_prefs[cfg.STORE_NAME].get(
+            cfg.KEY_ADDED_CHAPTERS_PATH, cfg.DEFAULT_ADDED_CHAPTERS_PATH)
+        if not added_root:
+            return
+        try:
+            os.makedirs(added_root, exist_ok=True)
+        except OSError as e:
+            error_dialog(self.gui, 'Could not archive source folder',
+                'Added chapters folder is not accessible: %s\n\n%s' % (added_root, str(e)),
+                show=True, det_msg=traceback.format_exc())
+            return
+
+        base_name = os.path.basename(os.path.normpath(folder))
+        target = os.path.join(added_root, base_name)
+        suffix = 1
+        while os.path.exists(target):
+            target = os.path.join(added_root, '%s_%d' % (base_name, suffix))
+            suffix += 1
+
+        try:
+            shutil.move(folder, target)
+        except Exception as e:
+            error_dialog(self.gui, 'Could not archive source folder',
+                'Failed to move "%s" to "%s": %s' % (folder, target, str(e)),
+                show=True, det_msg=traceback.format_exc())
 
     def _build_epub_from_html_files(self, folder_path, output_path, title, html_files):
         from lxml import etree
