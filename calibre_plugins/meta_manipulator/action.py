@@ -4,7 +4,7 @@ from calibre.ebooks.metadata import authors_to_string
 from calibre.gui2 import error_dialog, info_dialog
 from calibre.gui2.actions import InterfaceAction
 
-from calibre_plugins.metamanipulator.dialogs import MetaManipulatorDialog
+from calibre_plugins.meta_manipulator.dialogs import MetaManipulatorDialog
 
 ICON = 'images/metamanipulator.png'
 

@@ -10,9 +10,9 @@ except ImportError:
 from calibre.gui2 import error_dialog
 from calibre.gui2.actions import InterfaceAction
 
-import calibre_plugins.linkmanager.config as cfg
-from calibre_plugins.linkmanager.common_icons import set_plugin_icon_resources, get_icon
-from calibre_plugins.linkmanager.common_menus import create_menu_action_unique
+import calibre_plugins.link_manager.config as cfg
+from calibre_plugins.link_manager.common_icons import set_plugin_icon_resources, get_icon
+from calibre_plugins.link_manager.common_menus import create_menu_action_unique
 
 PLUGIN_ICONS = ['images/linkmanager.png']
 
@@ -75,7 +75,7 @@ class LinkManagerAction(InterfaceAction):
 
         title = db.title(book_id, index_is_id=True) or str(book_id)
 
-        from calibre_plugins.linkmanager.dialogs import LinkManagerDialog
+        from calibre_plugins.link_manager.dialogs import LinkManagerDialog
         dlg = LinkManagerDialog(self.gui, title, current_val or '', col_name,
                                 default_folder_dir=config.get(cfg.KEY_FOLDER_DEFAULT_DIR, ''),
                                 default_folder_text=config.get(cfg.KEY_FOLDER_DEFAULT_TEXT, ''))
@@ -95,7 +95,7 @@ class LinkManagerAction(InterfaceAction):
                 self.gui.library_view.model().current_changed(current, QModelIndex())
 
     def _manage_bulk(self, book_ids, db, config, col_name):
-        from calibre_plugins.linkmanager.dialogs import BulkLinkManagerDialog
+        from calibre_plugins.link_manager.dialogs import BulkLinkManagerDialog
         dlg = BulkLinkManagerDialog(self.gui, book_ids, db, col_name)
         if dlg.exec_() == dlg.Accepted:
             updated = dlg.updated_ids

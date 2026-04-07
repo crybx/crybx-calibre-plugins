@@ -5,10 +5,10 @@ __copyright__ = '2011, Grant Drake'
 
 try:
     from qt.core import (QWidget, QGridLayout, QGroupBox, QVBoxLayout, QCheckBox,
-                      QPushButton, QLabel, QPlainTextEdit)
+                      QPushButton, QLabel, QPlainTextEdit, QLineEdit)
 except ImportError:
     from PyQt5.Qt import (QWidget, QGridLayout, QGroupBox, QVBoxLayout, QCheckBox,
-                       QPushButton, QLabel, QPlainTextEdit)
+                       QPushButton, QLabel, QPlainTextEdit, QLineEdit)
 
 from calibre.utils.config import JSONConfig
 from calibre_plugins.epubaholic.common_dialogs import KeyboardConfigDialog
@@ -18,6 +18,11 @@ STORE_SAVED_SETTINGS = 'SavedSettings'
 STORE_NAME = 'Options'
 KEY_ASK_FOR_CONFIRMATION = 'askForConfirmation'
 KEY_CREATE_EPUB_STYLESHEET = 'createEpubStylesheet'
+KEY_NEW_CHAPTERS_PATH = 'newChaptersPath'
+KEY_ADDED_CHAPTERS_PATH = 'addedChaptersPath'
+
+DEFAULT_NEW_CHAPTERS_PATH = 'R:/epub-manipulator/new-chapters'
+DEFAULT_ADDED_CHAPTERS_PATH = 'R:/epub-manipulator/added-chapters'
 
 DEFAULT_CREATE_EPUB_STYLESHEET = '''\
 @charset "utf-8";
@@ -133,6 +138,8 @@ pre {
 DEFAULT_STORE_VALUES = {
                         KEY_ASK_FOR_CONFIRMATION : True,
                         KEY_CREATE_EPUB_STYLESHEET : DEFAULT_CREATE_EPUB_STYLESHEET,
+                        KEY_NEW_CHAPTERS_PATH : DEFAULT_NEW_CHAPTERS_PATH,
+                        KEY_ADDED_CHAPTERS_PATH : DEFAULT_ADDED_CHAPTERS_PATH,
                        }
 
 # This is where all preferences for this plugin will be stored
@@ -164,6 +171,25 @@ class ConfigWidget(QWidget):
         self.ask_for_confirmation_checkbox.setChecked(ask_for_confirmation)
         other_group_box_layout.addWidget(self.ask_for_confirmation_checkbox, 0, 0, 1, 3)
 
+        # Chapter import paths
+        chapters_group_box = QGroupBox('Chapter import paths:', self)
+        layout.addWidget(chapters_group_box)
+        chapters_layout = QGridLayout()
+        chapters_group_box.setLayout(chapters_layout)
+
+        chapters_layout.addWidget(QLabel('New chapters folder:', self), 0, 0)
+        self.new_chapters_edit = QLineEdit(self)
+        self.new_chapters_edit.setToolTip('Folder scanned for new chapter HTML files to import into matching epubs.')
+        self.new_chapters_edit.setText(c.get(KEY_NEW_CHAPTERS_PATH, DEFAULT_NEW_CHAPTERS_PATH))
+        chapters_layout.addWidget(self.new_chapters_edit, 0, 1)
+
+        chapters_layout.addWidget(QLabel('Added chapters folder:', self), 1, 0)
+        self.added_chapters_edit = QLineEdit(self)
+        self.added_chapters_edit.setToolTip('Folder where imported chapter files are moved (into a subfolder named '
+                                            'after the book title) after a successful import.')
+        self.added_chapters_edit.setText(c.get(KEY_ADDED_CHAPTERS_PATH, DEFAULT_ADDED_CHAPTERS_PATH))
+        chapters_layout.addWidget(self.added_chapters_edit, 1, 1)
+
         # Stylesheet editor for "Create epub from folder of HTML files"
         stylesheet_group_box = QGroupBox('Create epub stylesheet:', self)
         layout.addWidget(stylesheet_group_box)
@@ -191,6 +217,8 @@ class ConfigWidget(QWidget):
         new_prefs = {}
         new_prefs[KEY_ASK_FOR_CONFIRMATION] = self.ask_for_confirmation_checkbox.isChecked()
         new_prefs[KEY_CREATE_EPUB_STYLESHEET] = self.stylesheet_edit.toPlainText()
+        new_prefs[KEY_NEW_CHAPTERS_PATH] = self.new_chapters_edit.text().strip()
+        new_prefs[KEY_ADDED_CHAPTERS_PATH] = self.added_chapters_edit.text().strip()
         plugin_prefs[STORE_NAME] = new_prefs
 
     def _restore_default_stylesheet(self):

@@ -19,8 +19,8 @@ except ImportError:
                           QThread, pyqtSignal, QPixmap, QCheckBox, QPlainTextEdit,
                           QComboBox)
 
-from calibre_plugins.novelupdates.jobs import FetchWorker
-from calibre_plugins.novelupdates.common_icons import get_icon
+from calibre_plugins.novel_updates.jobs import FetchWorker
+from calibre_plugins.novel_updates.common_icons import get_icon
 
 PLUGIN_ICON = 'images/novelupdates.png'
 
@@ -133,7 +133,7 @@ class DownloadProgressDialog(QDialog):
         self.cancel_btn.clicked.connect(self._cancel)
         btn_layout.addWidget(self.cancel_btn)
 
-        from calibre_plugins.novelupdates.config import KEY_USER_AGENT
+        from calibre_plugins.novel_updates.config import KEY_USER_AGENT
         user_agent = config.get(KEY_USER_AGENT, '').strip() or None
         self.worker = FetchWorker(books_data, cf_cookie=cf_cookie,
                                   user_agent=user_agent, parent=self)
@@ -178,7 +178,7 @@ class BookDetailDialog(QDialog):
         self._combos     = {}   # field_name → QComboBox (pick-one fields)
         self._cover_worker = None
 
-        from calibre_plugins.novelupdates.config import (
+        from calibre_plugins.novel_updates.config import (
             KEY_UPDATE_TITLE, KEY_UPDATE_AUTHORS, KEY_AUTHORS_APPEND,
             KEY_UPDATE_DESCRIPTION, KEY_DESCRIPTION_APPEND,
             KEY_UPDATE_ORIG_LANG, KEY_ORIG_LANG_COL, KEY_UPDATE_COVER,
@@ -347,8 +347,8 @@ class BookDetailDialog(QDialog):
         assoc_names_list = data.get('assoc_names') or []
 
         # Original language — resolve to column value or display name
-        from calibre_plugins.novelupdates.action import _nu_language_to_code
-        from calibre_plugins.novelupdates.common_lang import resolve_lang_for_column as _resolve_lang_for_column
+        from calibre_plugins.novel_updates.action import _nu_language_to_code
+        from calibre_plugins.novel_updates.common_lang import resolve_lang_for_column as _resolve_lang_for_column
         from calibre.utils.localization import calibre_langcode_to_name
         nu_lang_str      = data.get('language') or ''
         lang_code        = _nu_language_to_code(nu_lang_str)
@@ -692,7 +692,7 @@ class _SearchWorker(QThread):
         self.user_agent = user_agent
 
     def run(self):
-        from calibre_plugins.novelupdates.scraper import search_nu_series
+        from calibre_plugins.novel_updates.scraper import search_nu_series
         try:
             results = search_nu_series(self.query, cf_cookie=self.cf_cookie,
                                        user_agent=self.user_agent)
@@ -715,7 +715,7 @@ class _MetadataFetchWorker(QThread):
         self.user_agent = user_agent
 
     def run(self):
-        from calibre_plugins.novelupdates.scraper import fetch_nu_metadata
+        from calibre_plugins.novel_updates.scraper import fetch_nu_metadata
         try:
             data = fetch_nu_metadata(self.url, cf_cookie=self.cf_cookie,
                                      user_agent=self.user_agent)
@@ -837,7 +837,7 @@ class SearchLinkDialog(QDialog):
             except Exception:
                 pass
 
-        from calibre_plugins.novelupdates.config import KEY_CF_COOKIE, KEY_USER_AGENT
+        from calibre_plugins.novel_updates.config import KEY_CF_COOKIE, KEY_USER_AGENT
         cf = self._config.get(KEY_CF_COOKIE, '').strip()
         if cf.lower().startswith('cf_clearance='):
             cf = cf[len('cf_clearance='):]
@@ -897,7 +897,7 @@ class SearchLinkDialog(QDialog):
         except Exception:
             pass
 
-        from calibre_plugins.novelupdates.config import KEY_LINK_COL
+        from calibre_plugins.novel_updates.config import KEY_LINK_COL
         link_col = self._config.get(KEY_LINK_COL, '#links').strip()
         if not link_col:
             return
@@ -937,11 +937,11 @@ class _SeriesPreviewDialog(QDialog):
         self._cover_worker = None
         self._checkboxes = {}
 
-        from calibre_plugins.novelupdates.config import (
+        from calibre_plugins.novel_updates.config import (
             KEY_GENRES_COL, KEY_TAGS_COL,
             KEY_ASSOC_NAMES_COL, KEY_ORIG_LANG_COL)
-        from calibre_plugins.novelupdates.action import _nu_language_to_code
-        from calibre_plugins.novelupdates.common_lang import resolve_lang_for_column
+        from calibre_plugins.novel_updates.action import _nu_language_to_code
+        from calibre_plugins.novel_updates.common_lang import resolve_lang_for_column
         from calibre.utils.localization import calibre_langcode_to_name
 
         layout = QVBoxLayout(self)
@@ -1166,7 +1166,7 @@ class AddFromNUDialog(QDialog):
             except Exception:
                 pass
 
-        from calibre_plugins.novelupdates.config import KEY_CF_COOKIE, KEY_USER_AGENT
+        from calibre_plugins.novel_updates.config import KEY_CF_COOKIE, KEY_USER_AGENT
         cf = self._config.get(KEY_CF_COOKIE, '').strip()
         if cf.lower().startswith('cf_clearance='):
             cf = cf[len('cf_clearance='):]
@@ -1208,7 +1208,7 @@ class AddFromNUDialog(QDialog):
             except Exception:
                 pass
 
-        from calibre_plugins.novelupdates.config import KEY_CF_COOKIE, KEY_USER_AGENT
+        from calibre_plugins.novel_updates.config import KEY_CF_COOKIE, KEY_USER_AGENT
         cf = self._config.get(KEY_CF_COOKIE, '').strip()
         if cf.lower().startswith('cf_clearance='):
             cf = cf[len('cf_clearance='):]
@@ -1249,7 +1249,7 @@ class AddFromNUDialog(QDialog):
             return
 
         if self._apply_fn:
-            from calibre_plugins.novelupdates.config import DEFAULT_STORE_VALUES
+            from calibre_plugins.novel_updates.config import DEFAULT_STORE_VALUES
             add_config = dict(self._config)
             add_config.update({k: True for k, v in DEFAULT_STORE_VALUES.items()
                                if isinstance(v, bool)})
@@ -1258,7 +1258,7 @@ class AddFromNUDialog(QDialog):
                     add_config[k] = False
             self._apply_fn(book_id, nu_url, data, db, add_config)
 
-        from calibre_plugins.novelupdates.config import KEY_LINK_COL
+        from calibre_plugins.novel_updates.config import KEY_LINK_COL
         link_col = self._config.get(KEY_LINK_COL, '#links').strip()
         if link_col:
             md_link = '[Novel Updates](%s)' % nu_url

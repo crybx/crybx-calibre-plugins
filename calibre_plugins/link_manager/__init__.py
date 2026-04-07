@@ -12,14 +12,14 @@ class ActionLinkManager(InterfaceActionBase):
     version                 = (1, 0, 0)
     minimum_calibre_version = (2, 85, 1)
 
-    actual_plugin           = 'calibre_plugins.linkmanager.action:LinkManagerAction'
+    actual_plugin           = 'calibre_plugins.link_manager.action:LinkManagerAction'
 
     def is_customizable(self):
         return True
 
     def config_widget(self):
         if self.actual_plugin_:
-            from calibre_plugins.linkmanager.config import ConfigWidget
+            from calibre_plugins.link_manager.config import ConfigWidget
             return ConfigWidget(self.actual_plugin_)
 
     def save_settings(self, config_widget):

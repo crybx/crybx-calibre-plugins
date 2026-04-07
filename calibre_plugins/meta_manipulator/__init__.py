@@ -9,4 +9,4 @@ class ActionMetaManipulator(InterfaceActionBase):
     description = 'Bulk metadata manipulation for any book format'
     supported_platforms = ['windows', 'osx', 'linux']
     minimum_calibre_version = (5, 0, 0)
-    actual_plugin = 'calibre_plugins.metamanipulator.action:MetaManipulatorAction'
+    actual_plugin = 'calibre_plugins.meta_manipulator.action:MetaManipulatorAction'

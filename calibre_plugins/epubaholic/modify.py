@@ -18,6 +18,9 @@ from calibre.customize.ui import apply_null_metadata
 from calibre.libunzip import extract as zipextract
 from calibre.ptempfile import TemporaryDirectory
 
+from calibre_plugins.epubaholic.config import (plugin_prefs, STORE_NAME,
+                                                 KEY_NEW_CHAPTERS_PATH, KEY_ADDED_CHAPTERS_PATH,
+                                                 DEFAULT_NEW_CHAPTERS_PATH, DEFAULT_ADDED_CHAPTERS_PATH)
 from calibre_plugins.epubaholic.container import ExtendedContainer, OPF_NS
 from calibre_plugins.epubaholic.covers import CoverUpdater
 from calibre_plugins.epubaholic.css import CSSUpdater
@@ -71,7 +74,9 @@ class BookModifier(object):
                 import datetime
                 # Clean title for folder name (same as in _import_chapters)
                 clean_title = re.sub(r'[\\/:*?"<>|]', '', book_title)
-                debug_path = os.path.join('R:/epub-manipulator/added-chapters', clean_title)
+                added_chapters_root = plugin_prefs[STORE_NAME].get(
+                    KEY_ADDED_CHAPTERS_PATH, DEFAULT_ADDED_CHAPTERS_PATH)
+                debug_path = os.path.join(added_chapters_root, clean_title)
                 
                 # Add date and time to filename
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -484,7 +489,13 @@ class BookModifier(object):
             return False
 
         self.log('\tLooking for chapters to import')
-        chapters_path = 'R:/epub-manipulator/new-chapters'
+        prefs = plugin_prefs[STORE_NAME]
+        chapters_path = prefs.get(KEY_NEW_CHAPTERS_PATH, DEFAULT_NEW_CHAPTERS_PATH)
+        added_chapters_root = prefs.get(KEY_ADDED_CHAPTERS_PATH, DEFAULT_ADDED_CHAPTERS_PATH)
+
+        if not chapters_path or not os.path.isdir(chapters_path):
+            self.log('New chapters folder is not configured or does not exist:', chapters_path)
+            return False
 
         # Get all files in the directory
         all_files = [f for f in os.listdir(chapters_path)]
@@ -540,7 +551,7 @@ class BookModifier(object):
         title = container.get_book_title()
         # remove illegal characters from title
         title = re.sub(r'[\\/:*?"<>|]', '', title)
-        new_chapters_path = os.path.join('R:/epub-manipulator/added-chapters', title)
+        new_chapters_path = os.path.join(added_chapters_root, title)
         self._move_chapter_files(chapter_files, chapters_path, new_chapters_path)
         
         # Set the lastimport column with the last (highest) chapter number

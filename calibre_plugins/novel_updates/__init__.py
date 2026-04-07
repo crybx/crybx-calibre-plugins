@@ -12,14 +12,14 @@ class ActionNovelUpdates(InterfaceActionBase):
     version                 = (1, 0, 0)
     minimum_calibre_version = (2, 85, 1)
 
-    actual_plugin           = 'calibre_plugins.novelupdates.action:NovelUpdatesAction'
+    actual_plugin           = 'calibre_plugins.novel_updates.action:NovelUpdatesAction'
 
     def is_customizable(self):
         return True
 
     def config_widget(self):
         if self.actual_plugin_:
-            from calibre_plugins.novelupdates.config import ConfigWidget
+            from calibre_plugins.novel_updates.config import ConfigWidget
             return ConfigWidget(self.actual_plugin_)
 
     def save_settings(self, config_widget):

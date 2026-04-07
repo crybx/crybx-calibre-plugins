@@ -19,8 +19,8 @@ except ImportError:
                           QThread, pyqtSignal, QPixmap, QCheckBox, QPlainTextEdit,
                           QComboBox)
 
-from calibre_plugins.mangaupdates.jobs import FetchWorker
-from calibre_plugins.mangaupdates.common_icons import get_icon
+from calibre_plugins.manga_updates.jobs import FetchWorker
+from calibre_plugins.manga_updates.common_icons import get_icon
 
 PLUGIN_ICON = 'images/mangaupdates.png'
 
@@ -133,7 +133,7 @@ class DownloadProgressDialog(QDialog):
         self.cancel_btn.clicked.connect(self._cancel)
         btn_layout.addWidget(self.cancel_btn)
 
-        from calibre_plugins.mangaupdates.config import KEY_USER_AGENT
+        from calibre_plugins.manga_updates.config import KEY_USER_AGENT
         user_agent = config.get(KEY_USER_AGENT, '').strip() or None
         self.worker = FetchWorker(books_data, user_agent=user_agent, parent=self)
         self.worker.progress.connect(self._on_progress)
@@ -177,7 +177,7 @@ class BookDetailDialog(QDialog):
         self._combos     = {}   # field_name → QComboBox (pick-one fields)
         self._cover_worker = None
 
-        from calibre_plugins.mangaupdates.config import (
+        from calibre_plugins.manga_updates.config import (
             KEY_UPDATE_TITLE, KEY_UPDATE_AUTHORS, KEY_AUTHORS_APPEND,
             KEY_UPDATE_DESCRIPTION, KEY_DESCRIPTION_APPEND,
             KEY_UPDATE_ORIG_LANG, KEY_ORIG_LANG_COL, KEY_UPDATE_COVER,
@@ -344,8 +344,8 @@ class BookDetailDialog(QDialog):
         new_title        = data.get('title') or ''
         new_desc         = _strip_html(data.get('description') or '')
         # Original language (inferred from type)
-        from calibre_plugins.mangaupdates.action import _mu_type_to_language
-        from calibre_plugins.mangaupdates.common_lang import resolve_lang_for_column as _resolve_lang_for_column
+        from calibre_plugins.manga_updates.action import _mu_type_to_language
+        from calibre_plugins.manga_updates.common_lang import resolve_lang_for_column as _resolve_lang_for_column
         from calibre.utils.localization import calibre_langcode_to_name
         mu_type          = data.get('type') or ''
         lang_code        = _mu_type_to_language(mu_type)
@@ -711,7 +711,7 @@ class _SearchWorker(QThread):
         self.user_agent = user_agent
 
     def run(self):
-        from calibre_plugins.mangaupdates.scraper import search_mu_series
+        from calibre_plugins.manga_updates.scraper import search_mu_series
         try:
             results = search_mu_series(self.query, user_agent=self.user_agent)
             self.finished.emit(results or [])
@@ -841,7 +841,7 @@ class SearchLinkDialog(QDialog):
             except Exception:
                 pass
 
-        from calibre_plugins.mangaupdates.config import KEY_USER_AGENT
+        from calibre_plugins.manga_updates.config import KEY_USER_AGENT
         ua = self._config.get(KEY_USER_AGENT, '').strip() or None
         self._worker = _SearchWorker(query, user_agent=ua, parent=self)
         self._worker.finished.connect(self._on_results)
@@ -896,7 +896,7 @@ class SearchLinkDialog(QDialog):
         except Exception:
             pass
 
-        from calibre_plugins.mangaupdates.config import KEY_LINK_COL
+        from calibre_plugins.manga_updates.config import KEY_LINK_COL
         link_col = self._config.get(KEY_LINK_COL, '#links').strip()
         if not link_col:
             return
@@ -935,7 +935,7 @@ class _MetadataFetchWorker(QThread):
         self.user_agent = user_agent
 
     def run(self):
-        from calibre_plugins.mangaupdates.scraper import fetch_mu_metadata
+        from calibre_plugins.manga_updates.scraper import fetch_mu_metadata
         try:
             data = fetch_mu_metadata(self.url, user_agent=self.user_agent)
             if data:
@@ -967,10 +967,10 @@ class SeriesPreviewDialog(QDialog):
         self._cover_worker = None
         self._checkboxes = {}  # field_name -> QCheckBox
 
-        from calibre_plugins.mangaupdates.config import (
+        from calibre_plugins.manga_updates.config import (
             KEY_GENRES_COL, KEY_CATEGORIES_COL, KEY_ARTISTS_COL,
             KEY_ARTISTS_TO_AUTHORS, KEY_ORIG_LANG_COL)
-        from calibre_plugins.mangaupdates.action import _mu_type_to_language
+        from calibre_plugins.manga_updates.action import _mu_type_to_language
         from calibre.utils.localization import calibre_langcode_to_name
 
         layout = QVBoxLayout(self)
@@ -1059,7 +1059,7 @@ class SeriesPreviewDialog(QDialog):
                    ', '.join(data.get('categories') or []))
 
         # Assoc. Names — pick one from a combo box, like the detail dialog
-        from calibre_plugins.mangaupdates.config import KEY_ASSOC_NAMES_COL
+        from calibre_plugins.manga_updates.config import KEY_ASSOC_NAMES_COL
         assoc_col = config.get(KEY_ASSOC_NAMES_COL, '').strip()
         assoc_names_list = data.get('assoc_names') or []
         if assoc_names_list and assoc_col:
@@ -1215,7 +1215,7 @@ class AddFromMUDialog(QDialog):
             except Exception:
                 pass
 
-        from calibre_plugins.mangaupdates.config import KEY_USER_AGENT
+        from calibre_plugins.manga_updates.config import KEY_USER_AGENT
         ua = self._config.get(KEY_USER_AGENT, '').strip() or None
         self._search_worker = _SearchWorker(query, user_agent=ua, parent=self)
         self._search_worker.finished.connect(self._on_results)
@@ -1251,7 +1251,7 @@ class AddFromMUDialog(QDialog):
             except Exception:
                 pass
 
-        from calibre_plugins.mangaupdates.config import KEY_USER_AGENT
+        from calibre_plugins.manga_updates.config import KEY_USER_AGENT
         ua = self._config.get(KEY_USER_AGENT, '').strip() or None
         self._fetch_worker = _MetadataFetchWorker(result['url'],
                                                    user_agent=ua, parent=self)
@@ -1292,7 +1292,7 @@ class AddFromMUDialog(QDialog):
         # _apply_fields was set by SeriesPreviewDialog checkboxes;
         # pass config with all booleans on so only _apply_fields controls what's written
         if self._apply_fn:
-            from calibre_plugins.mangaupdates.config import DEFAULT_STORE_VALUES
+            from calibre_plugins.manga_updates.config import DEFAULT_STORE_VALUES
             add_config = dict(self._config)
             add_config.update({k: True for k, v in DEFAULT_STORE_VALUES.items()
                                if isinstance(v, bool)})
@@ -1302,7 +1302,7 @@ class AddFromMUDialog(QDialog):
             self._apply_fn(book_id, mu_url, data, db, add_config)
 
         # Write the markdown link
-        from calibre_plugins.mangaupdates.config import KEY_LINK_COL
+        from calibre_plugins.manga_updates.config import KEY_LINK_COL
         link_col = self._config.get(KEY_LINK_COL, '#links').strip()
         if link_col:
             md_link = '[MangaUpdates](%s)' % mu_url

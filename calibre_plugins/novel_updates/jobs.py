@@ -12,7 +12,7 @@ try:
 except ImportError:
     from PyQt5.Qt import QThread, pyqtSignal
 
-from calibre_plugins.novelupdates.scraper import fetch_nu_metadata
+from calibre_plugins.novel_updates.scraper import fetch_nu_metadata
 
 
 class FetchWorker(QThread):
