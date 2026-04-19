@@ -510,7 +510,7 @@ class BookModifier(object):
             return False
 
         def get_chapter_number(filename):
-            digits = ''.join(c for c in filename if c.isdigit())
+            digits = ''.join(c for c in filename if c in '0123456789')
             return int(digits) if digits else 0  # Return 0 if no digits found
 
         # Sort files numerically so auto_2 comes before auto_10
