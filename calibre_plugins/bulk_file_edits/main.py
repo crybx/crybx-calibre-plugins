@@ -800,7 +800,7 @@ class DeleteMatchingFilesTool(Tool):
         self.boss.apply_container_update_to_gui()
         self.boss.show_current_diff()
 
-        summary = 'Deleted %d file(s).' % (len(names_to_delete) - len(skipped))
         if skipped:
-            summary += '\nSkipped %d protected file(s): %s' % (len(skipped), ', '.join(skipped))
-        info_dialog(self.gui, 'Delete matching files', summary, show=True)
+            info_dialog(self.gui, 'Delete matching files',
+                'Skipped %d protected file(s): %s' % (len(skipped), ', '.join(skipped)),
+                show=True)
