@@ -6,14 +6,16 @@ A collection of [Calibre](https://calibre-ebook.com/) plugins for ebook manageme
 
 ### Library Plugins (Calibre main window)
 
-| Plugin | Description |
-|--------|-------------|
-| **Epubaholic** | Build EPUBs from a folder of HTML files, or apply text transformations and cleanup actions to existing EPUBs without a full conversion |
-| **NovelUpdates** | Download metadata from [novelupdates.com](https://www.novelupdates.com/) |
-| **MangaUpdates** | Download metadata from [mangaupdates.com](https://www.mangaupdates.com/) |
-| **MangaDex** | Download metadata from [mangadex.org](https://mangadex.org/) |
-| **MetaManipulator** | Bulk metadata manipulation for any book format |
-| **LinkManager** | Manage markdown links in a custom column |
+| Plugin | Description                                                                                                                                                                         |
+|--------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Epubaholic** | Build EPUBs from a folder of HTML files, or apply text transformations and cleanup actions to existing EPUBs without a full conversion                                              |
+| **NovelUpdates** | Download metadata from [novelupdates.com](https://www.novelupdates.com/)                                                                                                            |
+| **MangaUpdates** | Download metadata from [mangaupdates.com](https://www.mangaupdates.com/)                                                                                                            |
+| **MangaDex** | Download metadata from [mangadex.org](https://mangadex.org/)                                                                                                                        |
+| **MetaManipulator** | Bulk metadata manipulation for any book format                                                                                                                                      |
+| **LinkManager** | Manage markdown links in a custom column                                                                                                                                            |
+| **AutoUriId** | Patches the Edit Metadata "Paste identifier" button so auto-detected URLs are pasted with the `uri:` prefix instead of `url:`                                                       |
+| **Frozen FTS** | Search Calibre's full-text-search.db without enabling live indexing. Uses an existing index in read-mostly mode, avoiding the per-book hash pass that toggling indexing on triggers |
 
 ### Edit Book Plugins (Calibre book editor)
 
