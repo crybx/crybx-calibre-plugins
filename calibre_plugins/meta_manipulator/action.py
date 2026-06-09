@@ -35,6 +35,8 @@ class MetaManipulatorAction(InterfaceAction):
             self._save_title_author_to_description)
         self.menu.addAction('Save title to #originaltitle',
             self._save_title_to_originaltitle)
+        self.menu.addAction('Move contents from title',
+            self._move_contents_from_title)
 
     def _show_dialog(self):
         book_ids = self._get_selected_ids()
@@ -54,6 +56,9 @@ class MetaManipulatorAction(InterfaceAction):
 
         if options.get('save_title_to_originaltitle'):
             count += self._do_save_title_to_originaltitle(db, book_ids)
+
+        if options.get('move_contents_from_title'):
+            count += self._do_move_contents_from_title(db, book_ids)
 
         self._refresh_ui(book_ids)
         info_dialog(self.gui, 'MetaManipulator',
@@ -108,6 +113,58 @@ class MetaManipulatorAction(InterfaceAction):
                 return 0
         return len(updates)
 
+    @staticmethod
+    def _split_trailing_parens(title):
+        """Split a trailing balanced parenthesized group off the title.
+
+        Returns (new_title, inner) where ``inner`` is the text inside the
+        outermost trailing parentheses (nested parentheses preserved), or
+        (title, None) when there is no balanced trailing group.
+        """
+        stripped = (title or '').rstrip()
+        if not stripped.endswith(')'):
+            return title, None
+
+        depth = 0
+        for i in range(len(stripped) - 1, -1, -1):
+            ch = stripped[i]
+            if ch == ')':
+                depth += 1
+            elif ch == '(':
+                depth -= 1
+                if depth == 0:
+                    inner = stripped[i + 1:-1]
+                    new_title = stripped[:i].rstrip()
+                    if not new_title or not inner:
+                        return title, None
+                    return new_title, inner
+        return title, None
+
+    def _do_move_contents_from_title(self, db, book_ids):
+        title_updates = {}
+        contents_updates = {}
+        for book_id in book_ids:
+            mi = db.get_metadata(book_id)
+            title = mi.title or ''
+            new_title, inner = self._split_trailing_parens(title)
+            if inner is None:
+                continue
+            title_updates[book_id] = new_title
+            contents_updates[book_id] = inner
+
+        if not contents_updates:
+            return 0
+
+        try:
+            db.set_field('#contents', contents_updates)
+        except Exception as e:
+            error_dialog(self.gui, 'MetaManipulator',
+                'Failed to update #contents: %s' % str(e), show=True)
+            return 0
+
+        db.set_field('title', title_updates)
+        return len(contents_updates)
+
     # Direct menu actions (bypass dialog)
     def _save_title_author_to_description(self):
         book_ids = self._get_selected_ids()
@@ -128,3 +185,13 @@ class MetaManipulatorAction(InterfaceAction):
         self._refresh_ui(book_ids)
         info_dialog(self.gui, 'MetaManipulator',
             'Saved title to #originaltitle for %d book(s).' % count, show=True)
+
+    def _move_contents_from_title(self):
+        book_ids = self._get_selected_ids()
+        if not book_ids:
+            return
+        db = self.gui.current_db.new_api
+        count = self._do_move_contents_from_title(db, book_ids)
+        self._refresh_ui(book_ids)
+        info_dialog(self.gui, 'MetaManipulator',
+            'Moved contents from title for %d book(s).' % count, show=True)

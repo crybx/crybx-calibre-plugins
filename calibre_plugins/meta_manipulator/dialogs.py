@@ -10,6 +10,8 @@ META_OPTIONS = [
      'Prepend "Title by Author" to the book description/comments field'),
     ('save_title_to_originaltitle', 'Save title to #originaltitle',
      'Copy the current title to the #originaltitle custom column'),
+    ('move_contents_from_title', 'Move contents from title',
+     'Move a trailing parenthesized group from the title into the #contents column'),
 ]
 
 ALL_OPTIONS = META_OPTIONS
