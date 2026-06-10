@@ -20,6 +20,27 @@ except ImportError:
                           QProgressBar, QTimer)
 
 
+# Map of substrings found in a URL to a default display text. When a bare URL
+# is added (e.g. from the clipboard) and contains one of these substrings, the
+# corresponding text is used instead of repeating the URL.
+SITE_DEFAULT_TEXT = {
+    'novelupdates.com': 'Novel Updates',
+    'ridibooks.com': 'Ridibooks',
+}
+
+
+def default_text_for_url(url):
+    """Return a default display text for a URL based on known sites.
+
+    Falls back to the URL itself if no known site matches.
+    """
+    lowered = url.lower()
+    for substring, text in SITE_DEFAULT_TEXT.items():
+        if substring in lowered:
+            return text
+    return url
+
+
 def parse_links(text):
     """Parse markdown links from comma-separated text.
     Format: [text](url), [text2](url2)
@@ -215,8 +236,9 @@ class LinkManagerDialog(QDialog):
         if parsed:
             self.links.extend(parsed)
         else:
-            # Treat as a bare URL — use the URL as both text and link
-            self.links.append((text, text))
+            # Treat as a bare URL — use a known-site default text if one
+            # matches, otherwise fall back to the URL as both text and link
+            self.links.append((default_text_for_url(text), text))
         self._populate_table()
 
     def add_folder_link(self):
