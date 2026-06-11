@@ -171,12 +171,12 @@ class LinkManagerDialog(QDialog):
         # Dialog buttons
         dialog_btns = QHBoxLayout()
         dialog_btns.addStretch()
-        self.apply_btn = QPushButton('Apply', self)
-        self.apply_btn.clicked.connect(self.accept)
-        dialog_btns.addWidget(self.apply_btn)
         self.cancel_btn = QPushButton('Cancel', self)
         self.cancel_btn.clicked.connect(self.reject)
         dialog_btns.addWidget(self.cancel_btn)
+        self.apply_btn = QPushButton('Apply', self)
+        self.apply_btn.clicked.connect(self.accept)
+        dialog_btns.addWidget(self.apply_btn)
         layout.addLayout(dialog_btns)
 
         self._populate_table()
