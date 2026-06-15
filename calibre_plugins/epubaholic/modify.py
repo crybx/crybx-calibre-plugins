@@ -1102,7 +1102,7 @@ class BookModifier(object):
 
         # Define the capitalization pattern based on capitalize_start_of_tags_patterns
         capitalize_patterns = [{
-            "regex": r"<p(\s[^>]*)?>([\"“'‘]?)(\\.{3}|…)?([a-z])",
+            "regex": r"<p(\s[^>]*)?>([\"“'‘]?)(\.{3}|…)?([a-z])",
             "replace": r"<p\1>\2\3\4",
             "transform": "uppercase",
             "transform_group": 4
