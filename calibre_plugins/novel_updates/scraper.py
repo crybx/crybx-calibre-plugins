@@ -82,6 +82,29 @@ def _inner_html(element):
     return ''.join(parts).strip()
 
 
+def _build_headers(cf_cookie=None, user_agent=None, accept=None, referer=None):
+    """Build a browser-like header set matching what gets past Cloudflare.
+
+    Cloudflare's bot detection fingerprints the full header set, not just the
+    User-Agent, so requests must carry the same Accept/Accept-Language/etc.
+    headers (and the same cf_clearance cookie + User-Agent) as the page fetch.
+    A request with only a User-Agent looks like a bot and gets a 403.
+    """
+    headers = {
+        'User-Agent': user_agent or USER_AGENT,
+        'Accept': accept or ('text/html,application/xhtml+xml,application/xml;'
+                             'q=0.9,*/*;q=0.8'),
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'identity',
+        'DNT': '1',
+    }
+    if referer:
+        headers['Referer'] = referer
+    if cf_cookie:
+        headers['Cookie'] = 'cf_clearance=' + cf_cookie
+    return headers
+
+
 def _fetch_page(url, cf_cookie=None, user_agent=None, log=None):
     """Fetch a URL and return the parsed lxml root, or None on failure."""
     def _log(msg):
@@ -94,16 +117,7 @@ def _fetch_page(url, cf_cookie=None, user_agent=None, log=None):
 
     _log('Fetching: ' + url)
 
-    headers = {
-        'User-Agent': user_agent or USER_AGENT,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'identity',
-        'DNT': '1',
-    }
-
-    if cf_cookie:
-        headers['Cookie'] = 'cf_clearance=' + cf_cookie
+    headers = _build_headers(cf_cookie=cf_cookie, user_agent=user_agent)
 
     try:
         req = Request(url, headers=headers)
@@ -141,6 +155,63 @@ def _fetch_page(url, cf_cookie=None, user_agent=None, log=None):
     except Exception as e:
         _log('Failed to parse HTML: ' + str(e))
         return None
+
+
+def _looks_like_image(data):
+    """Heuristic: does this byte string start with a known image signature?"""
+    if not data or len(data) < 16:
+        return False
+    sigs = (
+        b'\xff\xd8\xff',          # JPEG
+        b'\x89PNG\r\n\x1a\n',     # PNG
+        b'GIF87a', b'GIF89a',     # GIF
+        b'BM',                    # BMP
+    )
+    if data.startswith(sigs):
+        return True
+    # WEBP: "RIFF" .... "WEBP"
+    if data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+        return True
+    return False
+
+
+def fetch_cover_image(url, cf_cookie=None, user_agent=None, log=None):
+    """Download a cover image and return its raw bytes, or None on failure.
+
+    Uses the same Cloudflare-friendly headers, cf_clearance cookie, and
+    configured User-Agent as the page fetch. NovelUpdates serves cover images
+    from a Cloudflare-protected host, so a bare User-Agent + Referer request
+    (the old behaviour) gets a 403 challenge page instead of the image.
+    """
+    def _log(msg):
+        if log:
+            log(msg)
+
+    if not url:
+        return None
+
+    headers = _build_headers(
+        cf_cookie=cf_cookie, user_agent=user_agent,
+        accept='image/avif,image/webp,image/png,image/jpeg,*/*;q=0.8',
+        referer='https://www.novelupdates.com/')
+
+    try:
+        req = Request(url, headers=headers)
+        data = urlopen(req, timeout=15).read()
+    except HTTPError as e:
+        _log('  cover HTTP error %d for %s' % (e.code, url))
+        return None
+    except Exception as e:
+        _log('  cover download failed for %s: %s' % (url, e))
+        return None
+
+    if not _looks_like_image(data):
+        # Most likely a Cloudflare challenge / error page rather than an image.
+        _log('  cover response was not image data (%d bytes) for %s'
+             % (len(data or b''), url))
+        return None
+
+    return data
 
 
 def search_nu_series(query, cf_cookie=None, user_agent=None, log=None):

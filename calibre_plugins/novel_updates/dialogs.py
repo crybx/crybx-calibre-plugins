@@ -76,26 +76,28 @@ def _strip_html(html):
 class _CoverFetchWorker(QThread):
     cover_fetched = pyqtSignal(object)  # bytes or None
 
-    def __init__(self, url, parent=None):
+    def __init__(self, url, cf_cookie=None, user_agent=None, parent=None):
         QThread.__init__(self, parent)
         self.url = url
+        self.cf_cookie = cf_cookie
+        self.user_agent = user_agent
 
     def run(self):
         try:
-            try:
-                from urllib.request import Request, urlopen
-            except ImportError:
-                from urllib2 import Request, urlopen
-            req = Request(self.url, headers={
-                'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                               'AppleWebKit/537.36 (KHTML, like Gecko) '
-                               'Chrome/120.0.0.0 Safari/537.36'),
-                'Referer': 'https://www.novelupdates.com/',
-            })
-            data = urlopen(req, timeout=15).read()
-            self.cover_fetched.emit(data if len(data) > 1024 else None)
+            from calibre_plugins.novel_updates.scraper import fetch_cover_image
+            data = fetch_cover_image(self.url, cf_cookie=self.cf_cookie,
+                                     user_agent=self.user_agent)
+            self.cover_fetched.emit(data)
         except Exception:
             self.cover_fetched.emit(None)
+
+
+def _cf_creds(config):
+    """Return (cf_cookie, user_agent) from plugin config, or (None, None)."""
+    from calibre_plugins.novel_updates.config import KEY_CF_COOKIE, KEY_USER_AGENT
+    cf = config.get(KEY_CF_COOKIE, '').strip() or None
+    ua = config.get(KEY_USER_AGENT, '').strip() or None
+    return cf, ua
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +298,9 @@ class BookDetailDialog(QDialog):
                 cur_img.setPixmap(_scale_pixmap(pm))
                 cur_img.setText('')
         if cover_url:
-            self._cover_worker = _CoverFetchWorker(cover_url, self)
+            cf, ua = _cf_creds(config)
+            self._cover_worker = _CoverFetchWorker(cover_url, cf_cookie=cf,
+                                                   user_agent=ua, parent=self)
             self._cover_worker.cover_fetched.connect(self._on_cover_fetched)
             self._cover_worker.start()
 
@@ -1063,7 +1067,9 @@ class _SeriesPreviewDialog(QDialog):
         layout.addWidget(buttons)
 
         if data.get('cover_url'):
-            self._cover_worker = _CoverFetchWorker(data['cover_url'], self)
+            cf, ua = _cf_creds(config)
+            self._cover_worker = _CoverFetchWorker(data['cover_url'], cf_cookie=cf,
+                                                   user_agent=ua, parent=self)
             self._cover_worker.cover_fetched.connect(self._on_cover)
             self._cover_worker.start()
 

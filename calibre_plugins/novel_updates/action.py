@@ -410,7 +410,7 @@ class NovelUpdatesAction(InterfaceAction):
         if apply_cover:
             cover_url = data.get('cover_url')
             if cover_url:
-                self._download_one_cover(book_id, cover_url, db, db_api)
+                self._download_one_cover(book_id, cover_url, db, db_api, config)
 
         data['_already_applied'] = True
 
@@ -443,30 +443,27 @@ class NovelUpdatesAction(InterfaceAction):
             'Updated metadata for %d book(s).' % len(all_updated),
             show=True)
 
-    def _download_one_cover(self, book_id, cover_url, db, db_api):
-        '''Download and set cover for a single book.'''
-        try:
-            import urllib.request as ulr
-        except ImportError:
-            import urllib2 as ulr
+    def _download_one_cover(self, book_id, cover_url, db, db_api, config):
+        '''Download and set cover for a single book.
 
-        headers = {
-            'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                           'AppleWebKit/537.36 (KHTML, like Gecko) '
-                           'Chrome/120.0.0.0 Safari/537.36'),
-            'Referer': 'https://www.novelupdates.com/',
-        }
+        Uses the same Cloudflare-friendly headers, cf_clearance cookie, and
+        configured User-Agent as the page fetch — NovelUpdates serves covers
+        from a Cloudflare-protected host that 403s bare requests.
+        '''
+        from calibre_plugins.novel_updates.scraper import fetch_cover_image
 
-        try:
-            req = ulr.Request(cover_url, headers=headers)
-            cover_data = ulr.urlopen(req, timeout=15).read()
-            if cover_data and len(cover_data) > 1024:
-                try:
-                    db_api.set_cover({book_id: cover_data})
-                except Exception:
-                    db.set_cover(book_id, cover_data, index_is_id=True)
-        except Exception as e:
-            print('NovelUpdates: cover download failed for book %s: %s' % (book_id, e))
+        cf = config.get(cfg.KEY_CF_COOKIE, '').strip() or None
+        ua = config.get(cfg.KEY_USER_AGENT, '').strip() or None
+
+        cover_data = fetch_cover_image(cover_url, cf_cookie=cf, user_agent=ua,
+                                       log=lambda m: print('NovelUpdates:' + m))
+        if cover_data and len(cover_data) > 1024:
+            try:
+                db_api.set_cover({book_id: cover_data})
+            except Exception:
+                db.set_cover(book_id, cover_data, index_is_id=True)
+        else:
+            print('NovelUpdates: cover download failed for book %s' % book_id)
 
 
 # --- Helpers ---
