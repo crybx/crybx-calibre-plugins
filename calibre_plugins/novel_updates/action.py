@@ -377,8 +377,9 @@ class NovelUpdatesAction(InterfaceAction):
             if overrides is not None:
                 selected = overrides.get('assoc_names_value', '').strip()
             else:
-                names = data.get('assoc_names') or []
-                selected = names[0].strip() if names else ''
+                from calibre_plugins.novel_updates.scraper import preferred_assoc_name
+                lang_code = _nu_language_to_code(data.get('language') or '')
+                selected = preferred_assoc_name(data.get('assoc_names'), lang_code)
             if selected:
                 if overrides is not None:
                     assoc_append = overrides.get('assoc_names_append',

@@ -157,6 +157,60 @@ def _fetch_page(url, cf_cookie=None, user_agent=None, log=None):
         return None
 
 
+def _has_hangul(s):
+    """True if the string contains Korean Hangul characters."""
+    return any((0xAC00 <= o <= 0xD7A3)   # Hangul syllables
+               or (0x1100 <= o <= 0x11FF)  # Hangul Jamo
+               or (0x3130 <= o <= 0x318F)  # Hangul compatibility Jamo
+               for o in (ord(c) for c in s))
+
+
+def _has_kana(s):
+    """True if the string contains Japanese hiragana or katakana."""
+    return any((0x3040 <= o <= 0x309F)   # Hiragana
+               or (0x30A0 <= o <= 0x30FF)  # Katakana
+               or (0xFF66 <= o <= 0xFF9D)  # Halfwidth katakana
+               for o in (ord(c) for c in s))
+
+
+def _has_han(s):
+    """True if the string contains CJK (Han) ideographs."""
+    return any((0x4E00 <= o <= 0x9FFF)   # CJK Unified Ideographs
+               or (0x3400 <= o <= 0x4DBF)  # CJK Extension A
+               or (0xF900 <= o <= 0xFAFF)  # CJK Compatibility Ideographs
+               for o in (ord(c) for c in s))
+
+
+def preferred_assoc_name(names, lang_code):
+    """Pick the associated name written in the original language's script.
+
+    NovelUpdates lists several associated names (English, romanized, and the
+    native title). For a Korean series prefer the Hangul name, for Japanese
+    the kana name, for Chinese the Han name. Japanese is distinguished from
+    Chinese by the presence of kana (both use Han characters). Falls back to
+    the first name when nothing matches.
+    """
+    names = [n.strip() for n in (names or []) if n and n.strip()]
+    if not names:
+        return ''
+
+    lc = (lang_code or '').lower()
+    if lc.startswith('ko'):
+        match = _has_hangul
+    elif lc.startswith('ja'):
+        match = _has_kana
+    elif lc.startswith('zh'):
+        match = lambda s: _has_han(s) and not _has_kana(s) and not _has_hangul(s)
+    else:
+        match = None
+
+    if match:
+        for name in names:
+            if match(name):
+                return name
+    return names[0]
+
+
 def _looks_like_image(data):
     """Heuristic: does this byte string start with a known image signature?"""
     if not data or len(data) < 16:

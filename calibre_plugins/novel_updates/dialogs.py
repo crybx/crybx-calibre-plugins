@@ -443,6 +443,12 @@ class BookDetailDialog(QDialog):
                     idx = combo.findText(saved.get(fname + '_value', ''))
                     if idx >= 0:
                         combo.setCurrentIndex(idx)
+                elif fname == 'assoc_names' and choices:
+                    # Default to the name in the original language's script
+                    from calibre_plugins.novel_updates.scraper import preferred_assoc_name
+                    idx = combo.findText(preferred_assoc_name(choices, lang_code))
+                    if idx >= 0:
+                        combo.setCurrentIndex(idx)
                 combo.currentTextChanged.connect(self._save_choices)
                 self._combos[fname] = combo
                 left_v.addWidget(combo)
@@ -1038,6 +1044,12 @@ class _SeriesPreviewDialog(QDialog):
             self._assoc_combo = QComboBox(container)
             for name in assoc_list:
                 self._assoc_combo.addItem(name)
+            # Default to the name in the original language's script
+            from calibre_plugins.novel_updates.scraper import preferred_assoc_name
+            _idx = self._assoc_combo.findText(
+                preferred_assoc_name(assoc_list, lang_code))
+            if _idx >= 0:
+                self._assoc_combo.setCurrentIndex(_idx)
             body.addWidget(self._assoc_combo)
         else:
             self._assoc_combo = None
