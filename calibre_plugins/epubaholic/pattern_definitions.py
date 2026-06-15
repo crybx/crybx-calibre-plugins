@@ -125,7 +125,7 @@ strip_style_patterns = [
 
 capitalize_start_of_tags_patterns = [
     RegexPattern(
-        "<p([^>]*)>([\"“'‘]?)(\\.{3}|…)?([a-z])", "<p\\1>\\2\\3\\4",
+        "<p(\\s[^>]*)?>([\"“'‘]?)(\\.{3}|…)?([a-z])", "<p\\1>\\2\\3\\4",
         transform = "uppercase",
         transform_group = 4
     )
