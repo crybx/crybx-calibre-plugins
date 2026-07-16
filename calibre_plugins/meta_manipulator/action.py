@@ -102,7 +102,7 @@ class MetaManipulatorAction(InterfaceAction):
             mi = db.get_metadata(book_id)
             title = mi.title or ''
             if title:
-                updates[book_id] = title
+                updates[book_id] = title.replace('_', ' ')
 
         if updates:
             try:
