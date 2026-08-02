@@ -37,6 +37,8 @@ class MetaManipulatorAction(InterfaceAction):
             self._save_title_to_originaltitle)
         self.menu.addAction('Move contents from title',
             self._move_contents_from_title)
+        self.menu.addAction('Update contents with last import chapter',
+            self._update_contents_with_lastimport)
 
     def _show_dialog(self):
         book_ids = self._get_selected_ids()
@@ -59,6 +61,9 @@ class MetaManipulatorAction(InterfaceAction):
 
         if options.get('move_contents_from_title'):
             count += self._do_move_contents_from_title(db, book_ids)
+
+        if options.get('update_contents_with_lastimport'):
+            count += self._do_update_contents_with_lastimport(db, book_ids)
 
         self._refresh_ui(book_ids)
         info_dialog(self.gui, 'MetaManipulator',
@@ -165,6 +170,43 @@ class MetaManipulatorAction(InterfaceAction):
         db.set_field('title', title_updates)
         return len(contents_updates)
 
+    @staticmethod
+    def _merge_lastimport_into_contents(contents, lastimport):
+        """Build the new #contents value from the current one and #lastimport.
+
+        When #contents contains a '-' or '+', everything up to and including
+        whichever appears last is preserved and only what follows is replaced.
+        e.g. '10-12' with lastimport '15' becomes '10-15', and '600/600+3'
+        with lastimport '5' becomes '600/600+5'. Without either separator the
+        whole value is replaced.
+        """
+        contents = str(contents or '')
+        split_at = max(contents.rfind('-'), contents.rfind('+'))
+        if split_at >= 0:
+            return contents[:split_at].rstrip() + contents[split_at] + lastimport.lstrip()
+        return lastimport
+
+    def _do_update_contents_with_lastimport(self, db, book_ids):
+        updates = {}
+        for book_id in book_ids:
+            mi = db.get_metadata(book_id)
+            lastimport = mi.get('#lastimport')
+            if lastimport is None or not str(lastimport).strip():
+                continue
+            updates[book_id] = self._merge_lastimport_into_contents(
+                mi.get('#contents'), str(lastimport).strip())
+
+        if not updates:
+            return 0
+
+        try:
+            db.set_field('#contents', updates)
+        except Exception as e:
+            error_dialog(self.gui, 'MetaManipulator',
+                'Failed to update #contents: %s' % str(e), show=True)
+            return 0
+        return len(updates)
+
     # Direct menu actions (bypass dialog)
     def _save_title_author_to_description(self):
         book_ids = self._get_selected_ids()
@@ -195,3 +237,13 @@ class MetaManipulatorAction(InterfaceAction):
         self._refresh_ui(book_ids)
         info_dialog(self.gui, 'MetaManipulator',
             'Moved contents from title for %d book(s).' % count, show=True)
+
+    def _update_contents_with_lastimport(self):
+        book_ids = self._get_selected_ids()
+        if not book_ids:
+            return
+        db = self.gui.current_db.new_api
+        count = self._do_update_contents_with_lastimport(db, book_ids)
+        self._refresh_ui(book_ids)
+        info_dialog(self.gui, 'MetaManipulator',
+            'Updated contents from last import for %d book(s).' % count, show=True)

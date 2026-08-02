@@ -12,6 +12,9 @@ META_OPTIONS = [
      'Copy the current title to the #originaltitle custom column'),
     ('move_contents_from_title', 'Move contents from title',
      'Move a trailing parenthesized group from the title into the #contents column'),
+    ('update_contents_with_lastimport', 'Update contents with last import chapter',
+     'Copy the #lastimport column value to the #contents column.\n'
+     'Replaces only what follows the last "-" or "+" if either is present.'),
 ]
 
 ALL_OPTIONS = META_OPTIONS

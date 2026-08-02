@@ -54,7 +54,6 @@ STYLE_OPTIONS = [
 IMPORT_OPTIONS = [
     ('import_chapters', 'Import chapters', 'Import chapters from a folder of html files'),
     ('appy_replacements_to_imports', 'Apply replacements to imported chapters', 'Apply the text replacements selected to the imported chapters as well'),
-    ('update_contents_with_lastimport', 'Update contents with last import chapter', 'Copy the #lastimport column value to the #contents column'),
     # Apply replacements to existing chapters
     # Apply replacements to chapter range
     #   [ ] to [ ] (e.g. 0 to 10 or 50 to last)

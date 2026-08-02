@@ -248,10 +248,6 @@ class BookModifier(object):
         if options['import_chapters'] and not apply_changes_to_imports:
             is_changed |= self._import_chapters(container)
 
-        # Copy #lastimport to #contents (after imports so we get the latest value)
-        if options['update_contents_with_lastimport']:
-            self._update_contents_from_lastimport(container)
-
         return is_changed
 
     def _get_search_terms(self, container):
@@ -338,35 +334,6 @@ class BookModifier(object):
                 pass
 
         return None
-
-    def _update_contents_from_lastimport(self, container):
-        """Copy #lastimport value to #contents custom column.
-        If #contents already contains a '-', preserves the left side and replaces only the right side.
-        e.g. '10-12' updated with lastimport '15' becomes '10-15'.
-        """
-        self.log('\tCopying lastimport to contents')
-
-        # Prefer pending value (set by import_chapters in same run)
-        if hasattr(self, '_custom_metadata_updates') and '#lastimport' in self._custom_metadata_updates:
-            value = self._custom_metadata_updates['#lastimport']
-        else:
-            value = self._get_custom_column_value(container, '#lastimport')
-
-        if not value:
-            self.log('\t  No lastimport value found')
-            return
-
-        current_contents = self._get_custom_column_value(container, '#contents')
-        if current_contents and '-' in str(current_contents):
-            left = str(current_contents).rsplit('-', 1)[0].rstrip()
-            new_value = left + '-' + str(value).lstrip()
-        else:
-            new_value = value
-
-        if not hasattr(self, '_custom_metadata_updates'):
-            self._custom_metadata_updates = {}
-        self._custom_metadata_updates['#contents'] = new_value
-        self.log('\t  Set contents to:', new_value)
 
     def _update_opf_custom_column(self, container, column_name, value, debug_file=None):
         """Update custom column value directly in the OPF file while preserving ALL custom metadata"""
