@@ -3,7 +3,7 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 __license__   = 'GPL v3'
 __copyright__ = '2011, Grant Drake'
 
-import os, shutil, traceback
+import os, re, shutil, traceback
 try:
     from qt.core import (QUrl, QModelIndex, QMenu, QToolButton, QFileDialog,
                          QListView, QTreeView, QAbstractItemView)
@@ -31,6 +31,10 @@ class ModifyEpubAction(InterfaceAction):
     action_spec = ('Epubaholic', None, 'Modify the contents of an epub without a conversion', ())
     action_type = 'current'
     popup_type = QToolButton.MenuButtonPopup
+
+    # Hangul syllables, plus compatibility and conjoining jamo
+    KOREAN_RE = re.compile('[\uac00-\ud7a3\u1100-\u11ff\u3130-\u318f]')
+    LATIN_RE = re.compile('[A-Za-z]')
 
     def genesis(self):
         icon_resources = self.load_resources(PLUGIN_ICONS)
@@ -106,6 +110,8 @@ class ModifyEpubAction(InterfaceAction):
             book_id = db.import_book(mi, [temp_epub.name])
             os.remove(temp_epub.name)
 
+            self._apply_auto_metadata(book_id, title, folder, html_files)
+
             self.gui.library_view.model().books_added(1)
             self.gui.library_view.select_rows([book_id])
             self.gui.tags_view.recount()
@@ -115,6 +121,86 @@ class ModifyEpubAction(InterfaceAction):
 
             # Move the source folder into the configured added-chapters directory
             self._archive_source_folder(folder)
+
+    @staticmethod
+    def _highest_chapter_number(html_files):
+        '''
+        Build a #contents value from the highest numbered chapter file, using
+        the same digit-group logic as the "Import chapters" option uses for
+        #lastimport: each group of digits in the filename becomes a dot
+        separated component, e.g. "v1c14.html" -> "1.14". Returns None when
+        the filename holds no digits.
+        '''
+        if not html_files:
+            return None
+        digit_groups = re.findall(r'\d+', html_files[-1])
+        if not digit_groups:
+            return None
+        return '.'.join(str(int(g)) for g in digit_groups)
+
+    def _is_korean(self, folder_path, html_files, title):
+        '''
+        Sample the first, middle and last chapter files and decide whether the
+        book is Korean by comparing Hangul characters against Latin letters in
+        the visible text (markup and scripts stripped). The folder name is
+        included in the sample.
+        '''
+        sample_files = []
+        if html_files:
+            for idx in (0, len(html_files) // 2, len(html_files) - 1):
+                if html_files[idx] not in sample_files:
+                    sample_files.append(html_files[idx])
+
+        text = title or ''
+        for html_file in sample_files:
+            try:
+                with open(os.path.join(folder_path, html_file), 'r',
+                          encoding='utf-8', errors='replace') as f:
+                    raw = f.read()
+            except EnvironmentError:
+                continue
+            raw = re.sub(r'(?is)<(script|style)\b.*?</\1>', ' ', raw)
+            text += re.sub(r'<[^>]+>', ' ', raw)
+
+        korean = len(self.KOREAN_RE.findall(text))
+        return korean > 0 and korean > len(self.LATIN_RE.findall(text))
+
+    def _apply_auto_metadata(self, book_id, title, folder_path, html_files):
+        '''
+        Populate #fandom, #type and #contents (from the highest detected
+        chapter number), and for Korean content also set #origin, the language
+        and #originaltitle. Custom columns that do not exist in the current
+        library are skipped.
+        '''
+        db = self.gui.current_db.new_api
+        custom_keys = set(db.field_metadata.custom_field_keys())
+        updates = {}
+
+        for field, value in (('#fandom', 'original'), ('#type', 'webnovel')):
+            if field in custom_keys:
+                updates[field] = value
+
+        contents = self._highest_chapter_number(html_files)
+        if contents and '#contents' in custom_keys:
+            updates['#contents'] = contents
+
+        if self._is_korean(folder_path, html_files, title):
+            updates['languages'] = ['kor']
+            if '#origin' in custom_keys:
+                updates['#origin'] = 'kr'
+            if '#originaltitle' in custom_keys:
+                updates['#originaltitle'] = title.replace('_', ' ')
+
+        failures = []
+        for field, value in updates.items():
+            try:
+                db.set_field(field, {book_id: value})
+            except Exception as e:
+                failures.append('%s: %s' % (field, str(e)))
+        if failures:
+            error_dialog(self.gui, 'Could not set metadata',
+                'Failed to set metadata for "%s":\n%s' % (title, '\n'.join(failures)),
+                show=True, det_msg=traceback.format_exc())
 
     def _archive_source_folder(self, folder):
         '''
