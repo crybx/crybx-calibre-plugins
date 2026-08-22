@@ -151,12 +151,32 @@ class ModifyEpubAction(InterfaceAction):
         korean = len(self.KOREAN_RE.findall(text))
         return korean > 0 and korean > len(self.LATIN_RE.findall(text))
 
+    # Source sites from the chapter filenames, mapped to the
+    # publisher name to use for them.
+    PUBLISHER_BY_SOURCE = (
+        ('page_kakao_com', 'Kakao'),
+        ('ridibooks_com', 'Ridibooks'),
+    )
+
+    @classmethod
+    def _publisher_from_filenames(cls, html_files):
+        '''
+        Return the publisher for the first known source site named in any of
+        the chapter filenames, or None when none of them match.
+        '''
+        for marker, publisher in cls.PUBLISHER_BY_SOURCE:
+            for html_file in html_files:
+                if marker in html_file.lower():
+                    return publisher
+        return None
+
     def _apply_auto_metadata(self, book_id, title, folder_path, html_files):
         '''
-        Populate #fandom, #type and #contents (from the highest detected
-        chapter number), and for Korean content also set #origin, the language
-        and #originaltitle. Custom columns that do not exist in the current
-        library are skipped.
+        Populate #fandom, #type, #contents (from the highest detected
+        chapter number) and the publisher (from the source site named in the
+        chapter filenames), and for Korean content also set #origin, the
+        language and #originaltitle. Custom columns that do not exist in the
+        current library are skipped.
         '''
         db = self.gui.current_db.new_api
         custom_keys = set(db.field_metadata.custom_field_keys())
@@ -169,6 +189,10 @@ class ModifyEpubAction(InterfaceAction):
         contents = chapter_number_from_filename(html_files[-1]) if html_files else None
         if contents and '#contents' in custom_keys:
             updates['#contents'] = contents
+
+        publisher = self._publisher_from_filenames(html_files)
+        if publisher:
+            updates['publisher'] = publisher
 
         if self._is_korean(folder_path, html_files, title):
             updates['languages'] = ['kor']
