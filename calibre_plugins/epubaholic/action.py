@@ -17,6 +17,8 @@ from calibre.ptempfile import PersistentTemporaryDirectory, PersistentTemporaryF
 
 import calibre_plugins.epubaholic.config as cfg
 from calibre_plugins.epubaholic import ActionModifyEpub
+from calibre_plugins.epubaholic.chapter_numbers import (chapter_sort_key,
+                                                        chapter_number_from_filename)
 from calibre_plugins.epubaholic.common_icons import set_plugin_icon_resources, get_icon
 from calibre_plugins.epubaholic.common_menus import create_menu_action_unique
 from calibre_plugins.epubaholic.dialogs import (ModifyEpubDialog, QueueProgressDialog,
@@ -88,7 +90,7 @@ class ModifyEpubAction(InterfaceAction):
         for folder in folders:
             html_files = sorted(
                 [f for f in os.listdir(folder) if f.lower().endswith(html_extensions)],
-                key=lambda fn: int(''.join(c for c in fn if c.isdigit()) or '0')
+                key=chapter_sort_key
             )
             title = os.path.basename(folder)
 
@@ -121,22 +123,6 @@ class ModifyEpubAction(InterfaceAction):
 
             # Move the source folder into the configured added-chapters directory
             self._archive_source_folder(folder)
-
-    @staticmethod
-    def _highest_chapter_number(html_files):
-        '''
-        Build a #contents value from the highest numbered chapter file, using
-        the same digit-group logic as the "Import chapters" option uses for
-        #lastimport: each group of digits in the filename becomes a dot
-        separated component, e.g. "v1c14.html" -> "1.14". Returns None when
-        the filename holds no digits.
-        '''
-        if not html_files:
-            return None
-        digit_groups = re.findall(r'\d+', html_files[-1])
-        if not digit_groups:
-            return None
-        return '.'.join(str(int(g)) for g in digit_groups)
 
     def _is_korean(self, folder_path, html_files, title):
         '''
@@ -180,7 +166,7 @@ class ModifyEpubAction(InterfaceAction):
             if field in custom_keys:
                 updates[field] = value
 
-        contents = self._highest_chapter_number(html_files)
+        contents = chapter_number_from_filename(html_files[-1]) if html_files else None
         if contents and '#contents' in custom_keys:
             updates['#contents'] = contents
 

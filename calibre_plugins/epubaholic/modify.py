@@ -21,6 +21,8 @@ from calibre.ptempfile import TemporaryDirectory
 from calibre_plugins.epubaholic.config import (plugin_prefs, STORE_NAME,
                                                  KEY_NEW_CHAPTERS_PATH, KEY_ADDED_CHAPTERS_PATH,
                                                  DEFAULT_NEW_CHAPTERS_PATH, DEFAULT_ADDED_CHAPTERS_PATH)
+from calibre_plugins.epubaholic.chapter_numbers import (chapter_sort_key,
+                                                        chapter_number_from_filename)
 from calibre_plugins.epubaholic.container import ExtendedContainer, OPF_NS
 from calibre_plugins.epubaholic.covers import CoverUpdater
 from calibre_plugins.epubaholic.css import CSSUpdater
@@ -476,15 +478,11 @@ class BookModifier(object):
             self.log('No chapter files found')
             return False
 
-        def get_chapter_number(filename):
-            digits = ''.join(c for c in filename if c in '0123456789')
-            return int(digits) if digits else 0  # Return 0 if no digits found
-
         # Sort files numerically so auto_2 comes before auto_10
-        chapter_files.sort(key=get_chapter_number)
+        chapter_files.sort(key=chapter_sort_key)
 
         for ch_file in chapter_files:
-            chapter_num = get_chapter_number(ch_file)
+            chapter_num = chapter_sort_key(ch_file)
             chapter_id = f'auto_{chapter_num}'
 
             # Generate random suffix once
@@ -524,8 +522,7 @@ class BookModifier(object):
         # Set the lastimport column with the last (highest) chapter number
         if chapter_files:
             # Extract digit groups separated by dots for display (e.g., "v1c14" → "1.14")
-            digit_groups = re.findall(r'\d+', chapter_files[-1])
-            display_num = '.'.join(digit_groups) if digit_groups else '0'
+            display_num = chapter_number_from_filename(chapter_files[-1], default='0')
             # Pass the new_chapters_path for debug logging
             self._set_lastimport(container, display_num, new_chapters_path)
         
