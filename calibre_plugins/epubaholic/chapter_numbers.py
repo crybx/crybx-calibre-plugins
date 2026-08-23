@@ -2,14 +2,19 @@
 # -*- coding: utf-8 -*-
 
 """
-Shared helpers for deriving chapter numbers from filenames.
+Shared helpers for finding chapter files in a folder and deriving chapter
+numbers from their filenames.
 
-Used by both the "Import chapters" option (which stores the result in
-#lastimport) and "Create epub(s) from folder(s) of HTML files" (which stores
-it in #contents), so the two columns stay consistent.
+Used by the "Import chapters" option (which stores the result in #lastimport),
+"Import chapters from folder\u2026" and "Create epub(s) from folder(s) of HTML
+files\u2026" (which stores it in #contents), so they all agree on which files
+count as chapters, what order they are in, and how they are numbered.
 """
 
+import os
 import re
+
+HTML_EXTENSIONS = ('.html', '.htm', '.xhtml')
 
 
 def chapter_sort_key(filename):
@@ -32,3 +37,17 @@ def chapter_number_from_filename(filename, default=None):
     if not digit_groups:
         return default
     return '.'.join(str(int(g)) for g in digit_groups)
+
+
+def html_chapter_files(folder):
+    """
+    Return the names of the HTML files in 'folder', ordered by
+    chapter_sort_key. Returns an empty list when the folder is missing or
+    holds no HTML files.
+    """
+    try:
+        names = os.listdir(folder)
+    except EnvironmentError:
+        return []
+    names = [n for n in names if n.lower().endswith(HTML_EXTENSIONS)]
+    return sorted(names, key=chapter_sort_key)

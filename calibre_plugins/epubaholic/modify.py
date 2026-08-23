@@ -22,7 +22,8 @@ from calibre_plugins.epubaholic.config import (plugin_prefs, STORE_NAME,
                                                  KEY_NEW_CHAPTERS_PATH, KEY_ADDED_CHAPTERS_PATH,
                                                  DEFAULT_NEW_CHAPTERS_PATH, DEFAULT_ADDED_CHAPTERS_PATH)
 from calibre_plugins.epubaholic.chapter_numbers import (chapter_sort_key,
-                                                        chapter_number_from_filename)
+                                                        chapter_number_from_filename,
+                                                        html_chapter_files)
 from calibre_plugins.epubaholic.container import ExtendedContainer, OPF_NS
 from calibre_plugins.epubaholic.covers import CoverUpdater
 from calibre_plugins.epubaholic.css import CSSUpdater
@@ -207,6 +208,9 @@ class BookModifier(object):
     def _process_book(self, container, options):
         is_changed = False
         apply_changes_to_imports = options['appy_replacements_to_imports']
+        # Set by "Import chapters from folder", which imports every html file
+        # in the folder the user picked instead of search term matching.
+        import_folder = options.get('import_chapters_folder')
 
         # META OPTIONS
         # update_metadata performed earlier
@@ -219,7 +223,7 @@ class BookModifier(object):
 
         # Imports if selected to be included in other changes
         if options['import_chapters'] and apply_changes_to_imports:
-            is_changed |= self._import_chapters(container)
+            is_changed |= self._import_chapters(container, import_folder)
         
         # HTML AND CSS CHANGES
         if options['lily_junk_cleanup']:
@@ -248,7 +252,7 @@ class BookModifier(object):
 
         # Imports if selected to not be included in other changes
         if options['import_chapters'] and not apply_changes_to_imports:
-            is_changed |= self._import_chapters(container)
+            is_changed |= self._import_chapters(container, import_folder)
 
         return is_changed
 
@@ -450,36 +454,52 @@ class BookModifier(object):
                 new_ch_file = new_ch_file + '_1'
             os.rename(os.path.join(source_path, ch_file), os.path.join(target_path, new_ch_file))
 
-    def _import_chapters(self, container):
+    def _import_chapters(self, container, source_folder=None):
+        '''
+        Import chapter html files into the book. Normally the files are picked
+        out of the configured new chapters folder by matching the book's search
+        terms; when 'source_folder' is given every html file in that folder is
+        imported instead, with no search term matching.
+        '''
         import random
-        search_terms = self._get_search_terms(container)
-        if not search_terms:
-            self.log('No search term found in calibre metadata')
-            return False
-
-        self.log('\tLooking for chapters to import')
         prefs = plugin_prefs[STORE_NAME]
-        chapters_path = prefs.get(KEY_NEW_CHAPTERS_PATH, DEFAULT_NEW_CHAPTERS_PATH)
         added_chapters_root = prefs.get(KEY_ADDED_CHAPTERS_PATH, DEFAULT_ADDED_CHAPTERS_PATH)
 
-        if not chapters_path or not os.path.isdir(chapters_path):
-            self.log('New chapters folder is not configured or does not exist:', chapters_path)
-            return False
+        if source_folder:
+            self.log('\tImporting all chapters from:', source_folder)
+            chapters_path = source_folder
+            if not os.path.isdir(chapters_path):
+                self.log('Chapters folder does not exist:', chapters_path)
+                return False
+            # Already ordered so auto_2 comes before auto_10
+            chapter_files = html_chapter_files(chapters_path)
+        else:
+            search_terms = self._get_search_terms(container)
+            if not search_terms:
+                self.log('No search term found in calibre metadata')
+                return False
 
-        # Get all files in the directory
-        all_files = [f for f in os.listdir(chapters_path)]
+            self.log('\tLooking for chapters to import')
+            chapters_path = prefs.get(KEY_NEW_CHAPTERS_PATH, DEFAULT_NEW_CHAPTERS_PATH)
 
-        # Process each search term individually
-        chapter_files = []
-        for term in search_terms:
-            chapter_files = self._process_search_term(term, all_files, chapter_files)
+            if not chapters_path or not os.path.isdir(chapters_path):
+                self.log('New chapters folder is not configured or does not exist:', chapters_path)
+                return False
+
+            # Get all files in the directory
+            all_files = [f for f in os.listdir(chapters_path)]
+
+            # Process each search term individually
+            chapter_files = []
+            for term in search_terms:
+                chapter_files = self._process_search_term(term, all_files, chapter_files)
+
+            # Sort files numerically so auto_2 comes before auto_10
+            chapter_files.sort(key=chapter_sort_key)
 
         if not chapter_files:
             self.log('No chapter files found')
             return False
-
-        # Sort files numerically so auto_2 comes before auto_10
-        chapter_files.sort(key=chapter_sort_key)
 
         for ch_file in chapter_files:
             chapter_num = chapter_sort_key(ch_file)

@@ -11,18 +11,18 @@ except ImportError:
     from PyQt5.Qt import (QUrl, QModelIndex, QMenu, QToolButton, QFileDialog,
                           QListView, QTreeView, QAbstractItemView)
 
-from calibre.gui2 import error_dialog
+from calibre.gui2 import error_dialog, question_dialog
 from calibre.gui2.actions import InterfaceAction
 from calibre.ptempfile import PersistentTemporaryDirectory, PersistentTemporaryFile, remove_dir
 
 import calibre_plugins.epubaholic.config as cfg
 from calibre_plugins.epubaholic import ActionModifyEpub
-from calibre_plugins.epubaholic.chapter_numbers import (chapter_sort_key,
-                                                        chapter_number_from_filename)
+from calibre_plugins.epubaholic.chapter_numbers import (chapter_number_from_filename,
+                                                        html_chapter_files)
 from calibre_plugins.epubaholic.common_icons import set_plugin_icon_resources, get_icon
 from calibre_plugins.epubaholic.common_menus import create_menu_action_unique
-from calibre_plugins.epubaholic.dialogs import (ModifyEpubDialog, QueueProgressDialog,
-                                                 AddBooksProgressDialog)
+from calibre_plugins.epubaholic.dialogs import (ALL_OPTIONS, ModifyEpubDialog,
+                                                 QueueProgressDialog, AddBooksProgressDialog)
 
 PLUGIN_ICONS = ['images/epubaholic_book.png']
 
@@ -51,6 +51,8 @@ class ModifyEpubAction(InterfaceAction):
                                   PLUGIN_ICONS[0], triggered=self.modify_epub)
         create_menu_action_unique(self, self.menu, 'Create epub(s) from folder(s) of HTML files\u2026',
                                   PLUGIN_ICONS[0], triggered=self.create_epub_from_folder)
+        create_menu_action_unique(self, self.menu, 'Import chapters from folder\u2026',
+                                  PLUGIN_ICONS[0], triggered=self.import_chapters_from_folder)
         self.menu.addSeparator()
         create_menu_action_unique(self, self.menu, 'Customize plugin\u2026',
                                   'config.png', shortcut=False,
@@ -85,13 +87,8 @@ class ModifyEpubAction(InterfaceAction):
         # Remember parent of selected folders for next time
         dynamic.set(PREF_KEY, os.path.dirname(folders[0]))
 
-        html_extensions = ('.html', '.htm', '.xhtml')
-
         for folder in folders:
-            html_files = sorted(
-                [f for f in os.listdir(folder) if f.lower().endswith(html_extensions)],
-                key=chapter_sort_key
-            )
+            html_files = html_chapter_files(folder)
             title = os.path.basename(folder)
 
             temp_epub = PersistentTemporaryFile(suffix='.epub')
@@ -359,6 +356,60 @@ class ModifyEpubAction(InterfaceAction):
             # Create a temporary directory to copy all the epubs to while scanning
             tdir = PersistentTemporaryDirectory('_epubaholic', prefix='')
             QueueProgressDialog(self.gui, book_epubs, tdir, dlg.options, self._queue_job, db)
+
+    def import_chapters_from_folder(self):
+        '''
+        Import every html file in a folder the user picks into the one
+        selected book, without the search term matching that the "Import
+        chapters" option relies on. Only makes sense for a single book and a
+        single folder, so both are required.
+        '''
+        from calibre.utils.config import dynamic
+        PREF_KEY = 'epubaholic_import_chapters_last_dir'
+
+        rows = self.gui.library_view.selectionModel().selectedRows()
+        if not rows or len(rows) != 1:
+            return error_dialog(self.gui, 'Cannot import chapters',
+                'You must select exactly one book to import chapters into.', show=True)
+
+        book_id = self.gui.library_view.get_selected_ids()[0]
+        db = self.gui.library_view.model().db
+        if not db.has_format(book_id, 'EPUB', index_is_id=True):
+            return error_dialog(self.gui, 'Cannot import chapters',
+                'No epub available. First convert the book to epub.', show=True)
+
+        initial_dir = dynamic.get(PREF_KEY, os.path.expanduser('~'))
+        if not os.path.isdir(initial_dir):
+            initial_dir = os.path.expanduser('~')
+
+        folder = QFileDialog.getExistingDirectory(self.gui,
+            'Select the folder of HTML files to import as chapters', initial_dir,
+            QFileDialog.Option.ShowDirsOnly)
+        if not folder:
+            return
+
+        # Remember parent of the selected folder for next time
+        dynamic.set(PREF_KEY, os.path.dirname(folder))
+
+        html_files = html_chapter_files(folder)
+        if not html_files:
+            return error_dialog(self.gui, 'Cannot import chapters',
+                'No HTML files found in "%s".' % folder, show=True)
+
+        title = db.title(book_id, index_is_id=True)
+        if not question_dialog(self.gui, 'Import chapters',
+                '<p>' + ('Import <b>%d HTML file(s)</b> from "%s" as chapters of '
+                         '<b>%s</b>?') % (len(html_files), folder, title)):
+            return
+
+        # Run the existing import through the normal modify pipeline, with
+        # every other modify option turned off.
+        options = dict((key, False) for key, _t, _tt in ALL_OPTIONS)
+        options['import_chapters'] = True
+        options['import_chapters_folder'] = folder
+
+        tdir = PersistentTemporaryDirectory('_epubaholic', prefix='')
+        QueueProgressDialog(self.gui, [book_id], tdir, options, self._queue_job, db)
 
     def _queue_job(self, tdir, options, books_to_modify):
         if not books_to_modify:
