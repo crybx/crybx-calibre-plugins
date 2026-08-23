@@ -21,9 +21,9 @@ from calibre.ptempfile import TemporaryDirectory
 from calibre_plugins.epubaholic.config import (plugin_prefs, STORE_NAME,
                                                  KEY_NEW_CHAPTERS_PATH, KEY_ADDED_CHAPTERS_PATH,
                                                  DEFAULT_NEW_CHAPTERS_PATH, DEFAULT_ADDED_CHAPTERS_PATH)
-from calibre_plugins.epubaholic.chapter_numbers import (chapter_sort_key,
-                                                        chapter_number_from_filename,
-                                                        html_chapter_files)
+from calibre_plugins.epubaholic.chapter_files import (chapter_sort_key,
+                                                      chapter_number_from_filename,
+                                                      html_chapter_files)
 from calibre_plugins.epubaholic.container import ExtendedContainer, OPF_NS
 from calibre_plugins.epubaholic.covers import CoverUpdater
 from calibre_plugins.epubaholic.css import CSSUpdater

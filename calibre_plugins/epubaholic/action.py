@@ -17,8 +17,8 @@ from calibre.ptempfile import PersistentTemporaryDirectory, PersistentTemporaryF
 
 import calibre_plugins.epubaholic.config as cfg
 from calibre_plugins.epubaholic import ActionModifyEpub
-from calibre_plugins.epubaholic.chapter_numbers import (chapter_number_from_filename,
-                                                        html_chapter_files)
+from calibre_plugins.epubaholic.chapter_files import (chapter_number_from_filename,
+                                                      html_chapter_files)
 from calibre_plugins.epubaholic.common_icons import set_plugin_icon_resources, get_icon
 from calibre_plugins.epubaholic.common_menus import create_menu_action_unique
 from calibre_plugins.epubaholic.dialogs import (ALL_OPTIONS, ModifyEpubDialog,
