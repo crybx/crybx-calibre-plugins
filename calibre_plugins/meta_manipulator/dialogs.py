@@ -15,6 +15,9 @@ META_OPTIONS = [
     ('update_contents_with_lastimport', 'Update contents with last import chapter',
      'Copy the #lastimport column value to the #contents column.\n'
      'Replaces only what follows the last "-" or "+" if either is present.'),
+    ('build_search_term', 'Build search term',
+     'Set the #searchterm column to "<title>+<publisher>".\n'
+     'The title is used exactly as it is, underscores included.'),
 ]
 
 ALL_OPTIONS = META_OPTIONS

@@ -171,9 +171,9 @@ class ModifyEpubAction(InterfaceAction):
         '''
         Populate #fandom, #type, #contents (from the highest detected
         chapter number) and the publisher (from the source site named in the
-        chapter filenames), and for Korean content also set #origin, the
-        language and #originaltitle. Custom columns that do not exist in the
-        current library are skipped.
+        chapter filenames), plus #searchterm for Ridibooks sources, and for
+        Korean content also set #origin, the language and #originaltitle.
+        Custom columns that do not exist in the current library are skipped.
         '''
         db = self.gui.current_db.new_api
         custom_keys = set(db.field_metadata.custom_field_keys())
@@ -190,6 +190,8 @@ class ModifyEpubAction(InterfaceAction):
         publisher = self._publisher_from_filenames(html_files)
         if publisher:
             updates['publisher'] = publisher
+            if publisher == 'Ridibooks' and '#searchterm' in custom_keys:
+                updates['#searchterm'] = '%s+Ridibooks' % title
 
         if self._is_korean(folder_path, html_files, title):
             updates['languages'] = ['kor']

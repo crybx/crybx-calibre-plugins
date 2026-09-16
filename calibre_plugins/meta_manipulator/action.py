@@ -39,6 +39,8 @@ class MetaManipulatorAction(InterfaceAction):
             self._move_contents_from_title)
         self.menu.addAction('Update contents with last import chapter',
             self._update_contents_with_lastimport)
+        self.menu.addAction('Build search term',
+            self._build_search_term)
 
     def _show_dialog(self):
         book_ids = self._get_selected_ids()
@@ -64,6 +66,9 @@ class MetaManipulatorAction(InterfaceAction):
 
         if options.get('update_contents_with_lastimport'):
             count += self._do_update_contents_with_lastimport(db, book_ids)
+
+        if options.get('build_search_term'):
+            count += self._do_build_search_term(db, book_ids)
 
         self._refresh_ui(book_ids)
         info_dialog(self.gui, 'MetaManipulator',
@@ -207,6 +212,33 @@ class MetaManipulatorAction(InterfaceAction):
             return 0
         return len(updates)
 
+    def _do_build_search_term(self, db, book_ids):
+        """Set #searchterm to "<title>+<publisher>".
+
+        The title is used exactly as it is, underscores included, so the
+        term matches the source site's own naming. Books without a title or
+        without a publisher are skipped.
+        """
+        updates = {}
+        for book_id in book_ids:
+            mi = db.get_metadata(book_id)
+            title = mi.title or ''
+            publisher = mi.publisher or ''
+            if not title or not publisher:
+                continue
+            updates[book_id] = '%s+%s' % (title, publisher)
+
+        if not updates:
+            return 0
+
+        try:
+            db.set_field('#searchterm', updates)
+        except Exception as e:
+            error_dialog(self.gui, 'MetaManipulator',
+                'Failed to update #searchterm: %s' % str(e), show=True)
+            return 0
+        return len(updates)
+
     # Direct menu actions (bypass dialog)
     def _save_title_author_to_description(self):
         book_ids = self._get_selected_ids()
@@ -247,3 +279,13 @@ class MetaManipulatorAction(InterfaceAction):
         self._refresh_ui(book_ids)
         info_dialog(self.gui, 'MetaManipulator',
             'Updated contents from last import for %d book(s).' % count, show=True)
+
+    def _build_search_term(self):
+        book_ids = self._get_selected_ids()
+        if not book_ids:
+            return
+        db = self.gui.current_db.new_api
+        count = self._do_build_search_term(db, book_ids)
+        self._refresh_ui(book_ids)
+        info_dialog(self.gui, 'MetaManipulator',
+            'Built search term for %d book(s).' % count, show=True)
