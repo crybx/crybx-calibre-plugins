@@ -370,7 +370,9 @@ def fetch_nu_metadata(url, cf_cookie=None, user_agent=None, log=None):
     result['original_publisher'] = _xpath_text(root, _XP['original_publisher'])
     result['english_publisher'] = _xpath_text(root, _XP['english_publisher'])
 
-    # Associated names: NU uses <br> between entries ("One entry per line")
+    # Associated names: NU uses <br> between entries ("One entry per line").
+    # Split on line breaks only -- a single name may legitimately contain
+    # commas or slashes (e.g. "따님, 아버님을 제게 주십시오").
     # text_content() drops <br> tags so we must walk the element manually
     assoc_els = root.xpath(_XP['assoc_names'])
     if assoc_els:
@@ -385,7 +387,7 @@ def fetch_nu_metadata(url, cf_cookie=None, user_agent=None, log=None):
             if child.tail:
                 parts.append(child.tail)
         full = ''.join(parts)
-        result['assoc_names'] = [n.strip() for n in re.split(r'[\n,/]+', full) if n.strip()]
+        result['assoc_names'] = [n.strip() for n in full.splitlines() if n.strip()]
     else:
         result['assoc_names'] = []
 
